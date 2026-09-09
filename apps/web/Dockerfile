@@ -1,11 +1,12 @@
 FROM node:22-alpine AS base
 RUN corepack enable && apk add --no-cache libc6-compat openssl
 WORKDIR /repo
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/
+COPY apps/web/prisma apps/web/prisma
 COPY packages/schema/package.json packages/schema/
 COPY packages/ui/package.json packages/ui/
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --frozen-lockfile
 COPY packages ./packages
 COPY apps/web ./apps/web
 WORKDIR /repo/apps/web

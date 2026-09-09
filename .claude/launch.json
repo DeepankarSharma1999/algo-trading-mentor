@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "web", "runtimeExecutable": "pnpm", "runtimeArgs": ["--filter", "web", "dev"], "port": 3000 },
+    { "name": "engine", "runtimeExecutable": "python", "runtimeArgs": ["-m", "uvicorn", "engine.main:app", "--port", "8000", "--app-dir", "services/engine"], "port": 8000 }
+  ]
+}
