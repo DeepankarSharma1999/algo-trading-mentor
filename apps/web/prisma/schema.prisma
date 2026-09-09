@@ -1,0 +1,182 @@
+// Source of truth for the database. Engine mirrors these tables in engine/db/models.py.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  sessions     Session[]
+  profile      Profile?
+  strategies   Strategy[]
+  @@map("users")
+}
+
+model Session {
+  id        String   @id
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Profile {
+  userId           String    @id @map("user_id")
+  safetyBucket     Decimal   @default(0) @map("safety_bucket") @db.Decimal(14, 2)
+  longTermBucket   Decimal   @default(0) @map("long_term_bucket") @db.Decimal(14, 2)
+  tradingBucket    Decimal   @default(0) @map("trading_bucket") @db.Decimal(14, 2)
+  riskProfile      String    @default("conservative") @map("risk_profile") // conservative|standard|hard_ceiling
+  onboardedAt      DateTime? @map("onboarded_at")
+  behaviourState   String    @default("RESEARCH") @map("behaviour_state") // CALM|ELEVATED|COOLDOWN|RESEARCH
+  stateReason      String    @default("Market closed.") @map("state_reason")
+  stateChangedAt   DateTime  @default(now()) @map("state_changed_at")
+  costOverrides    Json      @default("{}") @map("cost_overrides")
+  dataSource       String    @default("synthetic") @map("data_source")
+  theme            String    @default("system")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("profiles")
+}
+
+model Strategy {
+  id         String    @id                       // strategy_id: slug_vN
+  userId     String?   @map("user_id")           // NULL => template
+  name       String
+  slug       String
+  version    Int
+  parentId   String?   @map("parent_id")
+  status     String    @default("draft")         // draft|testable|validated|untested
+  spec       Json
+  plainRules String    @default("") @map("plain_rules")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, slug, version])
+  @@map("strategies")
+}
+
+model ValidationJob {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  strategyId   String    @map("strategy_id")
+  status       String    @default("queued")      // queued|running|done|failed
+  currentStage Int       @default(0) @map("current_stage")
+  report       Json?
+  error        String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  finishedAt   DateTime? @map("finished_at")
+  @@index([strategyId])
+  @@map("validation_jobs")
+}
+
+model Watcher {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  strategyId  String   @map("strategy_id")
+  execState   String   @default("WATCHING") @map("exec_state")
+  stateReason String   @default("") @map("state_reason")
+  context     Json     @default("{}")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+  @@index([userId])
+  @@map("watchers")
+}
+
+model Signal {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  watcherId  String   @map("watcher_id")
+  strategyId String   @map("strategy_id")
+  ts         DateTime
+  payload    Json
+  @@index([watcherId, ts])
+  @@map("signals")
+}
+
+model PaperTrade {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  strategyId    String    @map("strategy_id")
+  watcherId     String?   @map("watcher_id")
+  symbol        String
+  side          String
+  qty           Int
+  planned       Json
+  actual        Json
+  slippage      Float     @default(0)
+  costs         Float     @default(0)
+  mfeR          Float?    @map("mfe_r")
+  maeR          Float?    @map("mae_r")
+  exitReason    String?   @map("exit_reason")
+  regime        String    @default("range")
+  outcomeR      Float?    @map("outcome_r")
+  rulesFollowed Int       @default(0) @map("rules_followed")
+  rulesTotal    Int       @default(0) @map("rules_total")
+  status        String    @default("open")     // open|closed
+  openedAt      DateTime  @map("opened_at")
+  closedAt      DateTime? @map("closed_at")
+  @@index([userId, status])
+  @@map("paper_trades")
+}
+
+model JournalNote {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tradeId   String?  @map("trade_id")
+  text      String
+  flags     Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([userId])
+  @@map("journal_notes")
+}
+
+model StateEvent {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  kind      String   @default("behaviour")   // behaviour|profile_change|exec
+  fromState String   @map("from_state")
+  toState   String   @map("to_state")
+  reason    String
+  ts        DateTime @default(now())
+  @@index([userId, ts])
+  @@map("state_events")
+}
+
+model OverrideAttempt {
+  id     String   @id @default(cuid())
+  userId String   @map("user_id")
+  what   String
+  ts     DateTime @default(now())
+  @@index([userId, ts])
+  @@map("override_attempts")
+}
+
+model GuardrailLog {
+  id       String   @id @default(cuid())
+  userId   String?  @map("user_id")
+  endpoint String
+  reason   String
+  raw      String
+  ts       DateTime @default(now())
+  @@map("guardrail_log")
+}
+
+model SimClock {
+  id      Int      @id @default(1)
+  now     DateTime
+  speed   Int      @default(2)
+  running Boolean  @default(true)
+  @@map("sim_clock")
+}
+
+model EventCalendar {
+  id    String   @id @default(cuid())
+  date  DateTime @db.Date
+  label String
+  @@map("event_calendar")
+}

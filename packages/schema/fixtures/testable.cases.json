@@ -1,0 +1,26 @@
+{
+  "base": {
+    "strategy_id": "fixture_v1", "name": "Fixture", "version": 1, "parent_id": null, "market": "NSE_EQ",
+    "instruments": ["RELIANCE"], "timeframe": "15m", "session": { "start": "09:15", "end": "15:30", "flat_at_close": true },
+    "regime_affinity": ["trend"], "inputs": { "ema20": { "indicator": "ema", "params": { "length": 20 } } },
+    "entry_long": [{ "lhs": "close", "op": "crosses_above", "rhs": "ema20" }], "entry_short": null,
+    "trigger": { "type": "next_bar_open" }, "stop": { "type": "atr", "params": { "length": 14, "mult": 2 } },
+    "targets": [{ "type": "rr", "value": 2 }], "trailing": { "type": "none", "params": {} }, "time_exit": {},
+    "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 3 },
+    "automation_permission": "paper_only", "ambiguity_flags": [], "version_locked": false
+  },
+  "cases": [
+    { "name": "complete strategy is testable", "patch": {}, "testable": true, "missing_ids": [] },
+    { "name": "no entries", "patch": { "entry_long": [], "entry_short": null }, "testable": false, "missing_ids": ["entry"] },
+    { "name": "short-only entries count", "patch": { "entry_long": [], "entry_short": [{ "lhs": "close", "op": "<", "rhs": "ema20" }] }, "testable": true, "missing_ids": [] },
+    { "name": "missing stop", "patch": { "stop": null }, "testable": false, "missing_ids": ["stop"] },
+    { "name": "no exit at all", "patch": { "targets": [], "trailing": { "type": "none", "params": {} }, "time_exit": {} }, "testable": false, "missing_ids": ["exit"] },
+    { "name": "trailing alone is an exit", "patch": { "targets": [], "trailing": { "type": "atr", "params": { "length": 14, "mult": 3 } } }, "testable": true, "missing_ids": [] },
+    { "name": "time exit alone is an exit", "patch": { "targets": [], "time_exit": { "at_time": "15:15" } }, "testable": true, "missing_ids": [] },
+    { "name": "max_bars alone is an exit", "patch": { "targets": [], "time_exit": { "max_bars": 12 } }, "testable": true, "missing_ids": [] },
+    { "name": "no timeframe", "patch": { "timeframe": null }, "testable": false, "missing_ids": ["timeframe"] },
+    { "name": "no session", "patch": { "session": { "start": "", "end": "", "flat_at_close": true } }, "testable": false, "missing_ids": ["session_start", "session_end"] },
+    { "name": "ambiguity flags block", "patch": { "ambiguity_flags": ["stop rule reads two ways"] }, "testable": false, "missing_ids": ["ambiguity"] },
+    { "name": "everything missing lists everything", "patch": { "entry_long": [], "entry_short": null, "stop": null, "targets": [], "timeframe": "", "session": { "start": "", "end": "", "flat_at_close": false }, "ambiguity_flags": ["x"] }, "testable": false, "missing_ids": ["entry", "stop", "exit", "timeframe", "session_start", "session_end", "ambiguity"] }
+  ]
+}

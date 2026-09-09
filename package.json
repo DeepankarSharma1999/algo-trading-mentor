@@ -1,0 +1,13 @@
+{
+  "name": "algo-trading-mentor",
+  "private": true,
+  "packageManager": "pnpm@12.3.4",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "gen": "pnpm --filter @atm/schema gen"
+  }
+}

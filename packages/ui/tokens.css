@@ -1,0 +1,81 @@
+/* Algo Trading Mentor — design tokens. The only place colours, type and spacing are defined.
+   Identity: ledger-terminal. See DESIGN.md before touching anything here. */
+
+/* ---------- Light (default) ---------- */
+:root {
+  color-scheme: light;
+  /* ground & ink */
+  --ground: #F2F1EC;   /* bone */
+  --paper:  #FBFAF7;   /* page surface, used only for the rule-trace panel and inputs */
+  --ink:    #1B1F23;
+  --ink-2:  #5B6470;
+  --ink-3:  #8A919B;   /* disabled / de-emphasised */
+  --rule:   #D6D3CB;
+  --rule-strong: #B9B5AA;
+  /* one accent — interactive affordance and current-state marker only */
+  --accent: #2F4A8A;
+  --accent-ink: #FBFAF7;
+  --accent-tint: rgba(47, 74, 138, 0.08);
+  /* semantics — never used as accent */
+  --eligible: #1F7A3F; --eligible-tint: rgba(31, 122, 63, 0.10);
+  --watch:    #9A5B00; --watch-tint:    rgba(154, 91, 0, 0.12);
+  --blocked:  #A82A2A; --blocked-tint:  rgba(168, 42, 42, 0.10);
+  /* chart */
+  --chart-line: #2F4A8A;
+  --chart-grid: #E4E2DB;
+  --chart-axis: #8A919B;
+  --chart-dd-fill: rgba(168, 42, 42, 0.14);
+
+  /* type */
+  --font-display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --font-ui: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --fs-1: 12px;  --fs-2: 13.5px; --fs-3: 15px; --fs-4: 18px; --fs-5: 24px; --fs-6: 34px;
+  --fs-label: 11.5px; --ls-label: 0.12em;
+  --lh-tight: 1.2; --lh-body: 1.45;
+
+  /* layout */
+  --rail-w: 200px;
+  --strip-h: 44px;
+  --gutter: 24px;
+  --row-py: 10px;
+  --label-col: 200px;
+  --content-max: 1080px;
+
+  /* motion */
+  --fade: 120ms;
+}
+
+/* ---------- Dark: system preference, unless the user chose light ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #121417; --paper: #181B1F;
+    --ink: #E8E6E0; --ink-2: #A3A9B2; --ink-3: #6E747D;
+    --rule: #2A2E34; --rule-strong: #3A3F47;
+    --accent: #8FA5E0; --accent-ink: #121417; --accent-tint: rgba(143, 165, 224, 0.12);
+    --eligible: #5FBF80; --eligible-tint: rgba(95, 191, 128, 0.14);
+    --watch:    #E0A64A; --watch-tint:    rgba(224, 166, 74, 0.14);
+    --blocked:  #E06A6A; --blocked-tint:  rgba(224, 106, 106, 0.14);
+    --chart-line: #8FA5E0; --chart-grid: #22262C; --chart-axis: #6E747D;
+    --chart-dd-fill: rgba(224, 106, 106, 0.18);
+  }
+}
+
+/* ---------- Dark: explicit choice ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #121417; --paper: #181B1F;
+  --ink: #E8E6E0; --ink-2: #A3A9B2; --ink-3: #6E747D;
+  --rule: #2A2E34; --rule-strong: #3A3F47;
+  --accent: #8FA5E0; --accent-ink: #121417; --accent-tint: rgba(143, 165, 224, 0.12);
+  --eligible: #5FBF80; --eligible-tint: rgba(95, 191, 128, 0.14);
+  --watch:    #E0A64A; --watch-tint:    rgba(224, 166, 74, 0.14);
+  --blocked:  #E06A6A; --blocked-tint:  rgba(224, 106, 106, 0.14);
+  --chart-line: #8FA5E0; --chart-grid: #22262C; --chart-axis: #6E747D;
+  --chart-dd-fill: rgba(224, 106, 106, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --fade: 0ms; }
+}

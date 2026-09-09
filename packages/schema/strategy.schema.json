@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://algotradingmentor.local/strategy.schema.json",
+  "title": "Strategy",
+  "description": "A complete, testable rule set. Single source of truth for web and engine.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "strategy_id", "name", "version", "parent_id", "market", "instruments", "timeframe", "session",
+    "regime_affinity", "inputs", "entry_long", "entry_short", "trigger", "stop", "targets", "trailing",
+    "time_exit", "risk", "automation_permission", "ambiguity_flags", "version_locked"
+  ],
+  "properties": {
+    "strategy_id": { "type": "string", "pattern": "^[a-z0-9_]+_v[0-9]+$", "description": "slug_vN, immutable once validated" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "version": { "type": "integer", "minimum": 1 },
+    "parent_id": { "type": ["string", "null"] },
+    "market": { "type": "string", "enum": ["NSE_EQ", "NSE_FO"] },
+    "instruments": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z0-9&-]{1,20}$" }, "description": "User-chosen symbols only" },
+    "timeframe": { "type": "string", "enum": ["1m", "3m", "5m", "15m", "30m", "1h", "1D"] },
+    "session": {
+      "type": "object", "additionalProperties": false, "required": ["start", "end", "flat_at_close"],
+      "properties": {
+        "start": { "type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$", "default": "09:15" },
+        "end": { "type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$", "default": "15:30" },
+        "flat_at_close": { "type": "boolean" }
+      }
+    },
+    "regime_affinity": { "type": "array", "items": { "$ref": "#/definitions/Regime" }, "uniqueItems": true },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/Input" },
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" }
+    },
+    "entry_long": { "type": "array", "items": { "$ref": "#/definitions/Condition" } },
+    "entry_short": { "type": ["array", "null"], "items": { "$ref": "#/definitions/Condition" } },
+    "trigger": {
+      "type": "object", "additionalProperties": false, "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["next_bar_open", "break_of_signal_bar", "bar_close", "limit"] },
+        "offset_pct": { "type": "number" }
+      }
+    },
+    "stop": {
+      "type": ["object", "null"], "additionalProperties": false, "required": ["type", "params"],
+      "properties": {
+        "type": { "type": "string", "enum": ["signal_bar", "swing", "atr", "indicator", "fixed_pct"] },
+        "params": { "type": "object" }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["type", "value"],
+        "properties": {
+          "type": { "type": "string", "enum": ["rr", "indicator", "fixed_pct"] },
+          "value": { "type": "number" },
+          "ref": { "type": "string", "description": "input name when type = indicator" }
+        }
+      }
+    },
+    "trailing": {
+      "type": "object", "additionalProperties": false, "required": ["type", "params"],
+      "properties": {
+        "type": { "type": "string", "enum": ["none", "indicator", "atr", "breakeven_after_r"] },
+        "params": { "type": "object" }
+      }
+    },
+    "time_exit": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "max_bars": { "type": "integer", "minimum": 1 },
+        "at_time": { "type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$" }
+      }
+    },
+    "risk": {
+      "type": "object", "additionalProperties": false, "required": ["min_rr_after_costs", "max_equity_risk_pct", "max_trades_per_day"],
+      "properties": {
+        "min_rr_after_costs": { "type": "number", "minimum": 0 },
+        "max_equity_risk_pct": { "type": "number", "minimum": 0, "maximum": 1.0 },
+        "max_trades_per_day": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "automation_permission": { "type": "string", "enum": ["paper_only", "mentor_only", "blocked"] },
+    "ambiguity_flags": { "type": "array", "items": { "type": "string" }, "description": "Populated by the mentor; non-empty blocks testable" },
+    "version_locked": { "type": "boolean" }
+  },
+  "definitions": {
+    "Regime": { "type": "string", "enum": ["trend", "range", "compression", "high_vol", "event"] },
+    "Input": {
+      "type": "object", "additionalProperties": false, "required": ["indicator", "params"],
+      "properties": {
+        "indicator": {
+          "type": "string",
+          "enum": ["sma", "ema", "rsi", "macd", "bbands", "atr", "supertrend", "donchian", "vwap", "williams_r", "psar", "ichimoku", "pivots", "cpr", "swing", "volume_ratio", "adx", "heikin_ashi"]
+        },
+        "params": { "type": "object" }
+      }
+    },
+    "Operand": {
+      "description": "Input name, dotted input field (bb.upper), bar field (open/high/low/close/volume) or a number",
+      "oneOf": [{ "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)?(\\[-?[0-9]+\\])?$" }, { "type": "number" }]
+    },
+    "Condition": {
+      "type": "object", "additionalProperties": false, "required": ["lhs", "op", "rhs"],
+      "properties": {
+        "lhs": { "$ref": "#/definitions/Operand" },
+        "op": { "type": "string", "enum": [">", "<", ">=", "<=", "==", "crosses_above", "crosses_below", "rising", "falling"] },
+        "rhs": { "$ref": "#/definitions/Operand" },
+        "lookback": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

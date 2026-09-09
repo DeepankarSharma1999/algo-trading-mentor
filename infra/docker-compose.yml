@@ -1,0 +1,62 @@
+name: atm
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-atm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atm}
+      POSTGRES_DB: ${POSTGRES_DB:-atm}
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atm}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  engine:
+    build: { context: .., dockerfile: services/engine/Dockerfile }
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-atm}:${POSTGRES_PASSWORD:-atm}@postgres:5432/${POSTGRES_DB:-atm}
+      REDIS_URL: redis://redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      DATA_PROVIDER: ${DATA_PROVIDER:-synthetic}
+      DATA_DIR: /data
+    volumes: ["../data:/data:ro"]
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+  paper:
+    build: { context: .., dockerfile: services/engine/Dockerfile }
+    command: python -m engine.paper.worker
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-atm}:${POSTGRES_PASSWORD:-atm}@postgres:5432/${POSTGRES_DB:-atm}
+      REDIS_URL: redis://redis:6379/0
+      DATA_PROVIDER: ${DATA_PROVIDER:-synthetic}
+      DATA_DIR: /data
+      PAPER_SPEED: ${PAPER_SPEED:-2}
+    volumes: ["../data:/data:ro"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      web: { condition: service_healthy }
+  web:
+    build: { context: .., dockerfile: apps/web/Dockerfile }
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-atm}:${POSTGRES_PASSWORD:-atm}@postgres:5432/${POSTGRES_DB:-atm}
+      ENGINE_URL: http://engine:8000
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production-32-bytes-min}
+      DATA_PROVIDER: ${DATA_PROVIDER:-synthetic}
+    ports: ["3000:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      engine: { condition: service_started }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+volumes:
+  pgdata:
