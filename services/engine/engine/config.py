@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parents[1]
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://atm:atm@localhost:5432/atm")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://atm:atm@localhost:55432/atm")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 DATA_PROVIDER = os.getenv("DATA_PROVIDER", "synthetic")
 DATA_DIR = Path(os.getenv("DATA_DIR", str(REPO / "data")))
