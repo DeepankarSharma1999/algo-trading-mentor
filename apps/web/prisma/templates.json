@@ -1,0 +1,945 @@
+[
+  {
+    "id": "bollinger_squeeze_breakout_v1",
+    "name": "Bollinger Squeeze Breakout",
+    "regime": "compression",
+    "plain_rules": "Wait for the Bollinger bandwidth to sit in the bottom fifth of its last 120 bars on the previous bar. Go long when a 15-minute bar closes above the upper band on volume at least 1.5 times its 20-bar median; go short on the mirror close below the lower band. Fill at the next bar's open. The initial stop sits at the Bollinger middle band and an ATR(14) x 2 trail tightens it as price runs. Take profit at 2R. Entries are allowed from 09:30 to 15:10 and everything is flat at the close.",
+    "ambiguity_notes": [
+      "The squeeze is defined as bandwidth percentile below 20 on the prior bar; a 10 or 30 threshold is a different strategy.",
+      "Volume confirmation uses a 20-bar median ratio above 1.5; the bar close alone does not qualify.",
+      "The stop is the middle band at signal time, not the opposite band.",
+      "The 2R target and the ATR trail are both live; whichever hits first exits."
+    ],
+    "spec": {
+      "strategy_id": "bollinger_squeeze_breakout_v1",
+      "name": "Bollinger Squeeze Breakout",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["NIFTY"],
+      "timeframe": "15m",
+      "session": { "start": "09:30", "end": "15:10", "flat_at_close": true },
+      "regime_affinity": ["compression", "trend"],
+      "inputs": {
+        "bb": { "indicator": "bbands", "params": { "length": 20, "mult": 2, "pct_window": 120 } },
+        "vr": { "indicator": "volume_ratio", "params": { "window": 20 } },
+        "atr14": { "indicator": "atr", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "bb.bw_pct[-1]", "op": "<", "rhs": 20 },
+        { "lhs": "close", "op": "crosses_above", "rhs": "bb.upper" },
+        { "lhs": "vr", "op": ">", "rhs": 1.5 }
+      ],
+      "entry_short": [
+        { "lhs": "bb.bw_pct[-1]", "op": "<", "rhs": 20 },
+        { "lhs": "close", "op": "crosses_below", "rhs": "bb.lower" },
+        { "lhs": "vr", "op": ">", "rhs": 1.5 }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "indicator", "params": { "ref": "bb.mid" } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "atr", "params": { "length": 14, "mult": 2 } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 3 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "donchian_pullback_v1",
+    "name": "Donchian Pullback",
+    "regime": "trend",
+    "plain_rules": "Trade only when ADX(14) is above 20 and the 20-bar Donchian upper band is higher than it was 10 bars ago, which says the trend recently made a new high. Go long when a 15-minute bar dips to or below the 21 EMA but closes back above it; go short on the mirror when the Donchian lower band has fallen and a bar tags the 21 EMA from below and closes under it. Fill at the next bar's open. The stop sits under the last confirmed 5-bar swing low (above the swing high for shorts). The first target is the Donchian band itself and 2R is the fallback; stop moves to breakeven after 1R. Entries run from 09:30 to 15:15, flat at close.",
+    "ambiguity_notes": [
+      "Trend strength means ADX above 20 with the matching DI on top; a 25 threshold is a different filter.",
+      "A new high means the Donchian upper band is above its value 10 bars ago; it does not need to be rising every bar.",
+      "The pullback touch is the bar low at or below the 21 EMA with the close above it; a close-only touch does not qualify.",
+      "Swing stop uses a 5-bar confirmation; a 3-bar swing is a different strategy."
+    ],
+    "spec": {
+      "strategy_id": "donchian_pullback_v1",
+      "name": "Donchian Pullback",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["RELIANCE", "HDFCBANK"],
+      "timeframe": "15m",
+      "session": { "start": "09:30", "end": "15:15", "flat_at_close": true },
+      "regime_affinity": ["trend"],
+      "inputs": {
+        "dc": { "indicator": "donchian", "params": { "length": 20 } },
+        "ema21": { "indicator": "ema", "params": { "length": 21 } },
+        "adx": { "indicator": "adx", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "adx.adx", "op": ">", "rhs": 20 },
+        { "lhs": "adx.plus_di", "op": ">", "rhs": "adx.minus_di" },
+        { "lhs": "dc.upper", "op": ">", "rhs": "dc.upper[-10]" },
+        { "lhs": "low", "op": "<=", "rhs": "ema21" },
+        { "lhs": "close", "op": ">", "rhs": "ema21" }
+      ],
+      "entry_short": [
+        { "lhs": "adx.adx", "op": ">", "rhs": 20 },
+        { "lhs": "adx.minus_di", "op": ">", "rhs": "adx.plus_di" },
+        { "lhs": "dc.lower", "op": "<", "rhs": "dc.lower[-10]" },
+        { "lhs": "high", "op": ">=", "rhs": "ema21" },
+        { "lhs": "close", "op": "<", "rhs": "ema21" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "swing", "params": { "lookback": 5 } },
+      "targets": [{ "type": "indicator", "value": 0, "ref": "dc.upper" }, { "type": "rr", "value": 2 }],
+      "trailing": { "type": "breakeven_after_r", "params": { "r": 1 } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 2 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "vwap_sigma_mean_reversion_v1",
+    "name": "VWAP Sigma Mean Reversion",
+    "regime": "range",
+    "plain_rules": "Only trade when ADX(14) is below 25, so the day is not trending. Go long when a 5-minute bar closes back above the lower 2-sigma VWAP band after being below it, with RSI(14) under 35; go short when a bar closes back under the upper 2-sigma band with RSI above 65. Fill at the next bar's open. The stop sits 0.1% beyond the signal bar's low (high for shorts). The target is VWAP itself, and the trade is closed after 24 bars if VWAP has not been reached. Entries run from 09:45 to 15:00 and positions are flat at the close.",
+    "ambiguity_notes": [
+      "Band re-entry means the close crosses back inside the 2-sigma band; a touch of the band without the cross does not qualify.",
+      "The range filter is ADX below 25; the template does not look at the day's opening range.",
+      "The target is the VWAP line at exit time, which moves; there is no fixed R target.",
+      "24 bars on 5-minute data is two hours; a different holding limit changes the strategy."
+    ],
+    "spec": {
+      "strategy_id": "vwap_sigma_mean_reversion_v1",
+      "name": "VWAP Sigma Mean Reversion",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["BANKNIFTY"],
+      "timeframe": "5m",
+      "session": { "start": "09:45", "end": "15:00", "flat_at_close": true },
+      "regime_affinity": ["range"],
+      "inputs": {
+        "vw": { "indicator": "vwap", "params": {} },
+        "rsi14": { "indicator": "rsi", "params": { "length": 14 } },
+        "adx": { "indicator": "adx", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "adx.adx", "op": "<", "rhs": 25 },
+        { "lhs": "close", "op": "crosses_above", "rhs": "vw.lower2" },
+        { "lhs": "rsi14", "op": "<", "rhs": 35 }
+      ],
+      "entry_short": [
+        { "lhs": "adx.adx", "op": "<", "rhs": 25 },
+        { "lhs": "close", "op": "crosses_below", "rhs": "vw.upper2" },
+        { "lhs": "rsi14", "op": ">", "rhs": 65 }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "signal_bar", "params": { "buffer_pct": 0.1 } },
+      "targets": [{ "type": "indicator", "value": 0, "ref": "vw.vwap" }],
+      "trailing": { "type": "none", "params": {} },
+      "time_exit": { "max_bars": 24 },
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.25, "max_trades_per_day": 4 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "supertrend_rsi_positional_v1",
+    "name": "Supertrend RSI Positional",
+    "regime": "trend",
+    "plain_rules": "On daily bars, go long when Supertrend(10, 3) flips to up and RSI(14) is above 50; go short when it flips to down with RSI below 50. Fill at the next day's open. The stop is the Supertrend line and it trails with the line every day. Take profit at 3R or let the trailing line take you out. Positions are held overnight; the session covers the full 09:15 to 15:30 day and there is no flat-at-close.",
+    "ambiguity_notes": [
+      "A flip means the direction value crosses zero on the closed daily bar; an intrabar flip is not used.",
+      "RSI above 50 is the momentum filter; a 55 threshold is a different strategy.",
+      "The Supertrend line is both the initial stop and the trail; there is no separate ATR stop.",
+      "One entry per day at most."
+    ],
+    "spec": {
+      "strategy_id": "supertrend_rsi_positional_v1",
+      "name": "Supertrend RSI Positional",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["INFY", "TCS"],
+      "timeframe": "1D",
+      "session": { "start": "09:15", "end": "15:30", "flat_at_close": false },
+      "regime_affinity": ["trend"],
+      "inputs": {
+        "st": { "indicator": "supertrend", "params": { "length": 10, "mult": 3 } },
+        "rsi14": { "indicator": "rsi", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "st.direction", "op": "crosses_above", "rhs": 0 },
+        { "lhs": "rsi14", "op": ">", "rhs": 50 }
+      ],
+      "entry_short": [
+        { "lhs": "st.direction", "op": "crosses_below", "rhs": 0 },
+        { "lhs": "rsi14", "op": "<", "rhs": 50 }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "indicator", "params": { "ref": "st.line" } },
+      "targets": [{ "type": "rr", "value": 3 }],
+      "trailing": { "type": "indicator", "params": { "ref": "st.line" } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 2, "max_equity_risk_pct": 0.5, "max_trades_per_day": 1 },
+      "automation_permission": "mentor_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "cpr_trend_range_v1",
+    "name": "CPR Trend Range",
+    "regime": "range",
+    "plain_rules": "Use the prior day's Central Pivot Range as the day's value area. Go long when a 15-minute bar dips into the CPR (low at or below the top central) but closes back above it with RSI(14) above 45; go short when a bar pokes above the bottom central from below and closes under it with RSI below 55. Fill at the next bar's open. The stop sits 0.1% beyond the signal bar's extreme. Take profit at 2R, and close anything still open at 15:10. Entries run from 09:30 to 15:15 and the book is flat at the close.",
+    "ambiguity_notes": [
+      "The CPR is computed from the prior day's high, low and close; the current day's developing range is not used.",
+      "A rejection means the bar low touched the top central and the close is back above it; a close inside the CPR does not qualify.",
+      "The template does not filter on CPR width, so narrow and wide CPR days are treated the same.",
+      "The 15:10 time exit is separate from the 15:15 session end."
+    ],
+    "spec": {
+      "strategy_id": "cpr_trend_range_v1",
+      "name": "CPR Trend Range",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["NIFTY"],
+      "timeframe": "15m",
+      "session": { "start": "09:30", "end": "15:15", "flat_at_close": true },
+      "regime_affinity": ["range", "trend"],
+      "inputs": {
+        "cpr": { "indicator": "cpr", "params": {} },
+        "rsi14": { "indicator": "rsi", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "low", "op": "<=", "rhs": "cpr.tc" },
+        { "lhs": "close", "op": ">", "rhs": "cpr.tc" },
+        { "lhs": "rsi14", "op": ">", "rhs": 45 }
+      ],
+      "entry_short": [
+        { "lhs": "high", "op": ">=", "rhs": "cpr.bc" },
+        { "lhs": "close", "op": "<", "rhs": "cpr.bc" },
+        { "lhs": "rsi14", "op": "<", "rhs": 55 }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "signal_bar", "params": { "buffer_pct": 0.1 } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "none", "params": {} },
+      "time_exit": { "at_time": "15:10" },
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 3 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "pivot_retest_v1",
+    "name": "Pivot Retest",
+    "regime": "range",
+    "plain_rules": "Use the prior day's floor pivots. Go long when a 15-minute bar's low reaches S1 but the bar closes back above S1 with RSI(14) below 40; go short when a bar's high reaches R1 but closes back under it with RSI above 60. Fill at the next bar's open. The stop is 0.15% beyond the signal bar's extreme and moves to breakeven once the trade is 1R in profit. Take profit at 2R, and anything still open closes at 15:10. Entries run from 09:30 to 15:15 with the book flat at close.",
+    "ambiguity_notes": [
+      "The retest level is S1 for longs and R1 for shorts; the central pivot is not traded in this template.",
+      "A retest means the bar's extreme touched the level and the close is back on the right side; the bar does not need to be a pin bar.",
+      "RSI below 40 (above 60 for shorts) is the exhaustion filter; a 30/70 filter is a different strategy.",
+      "Breakeven is moved after 1R, not after the first target."
+    ],
+    "spec": {
+      "strategy_id": "pivot_retest_v1",
+      "name": "Pivot Retest",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["HDFCBANK", "ICICIBANK"],
+      "timeframe": "15m",
+      "session": { "start": "09:30", "end": "15:15", "flat_at_close": true },
+      "regime_affinity": ["range"],
+      "inputs": {
+        "piv": { "indicator": "pivots", "params": {} },
+        "rsi14": { "indicator": "rsi", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "low", "op": "<=", "rhs": "piv.s1" },
+        { "lhs": "close", "op": ">", "rhs": "piv.s1" },
+        { "lhs": "rsi14", "op": "<", "rhs": 40 }
+      ],
+      "entry_short": [
+        { "lhs": "high", "op": ">=", "rhs": "piv.r1" },
+        { "lhs": "close", "op": "<", "rhs": "piv.r1" },
+        { "lhs": "rsi14", "op": ">", "rhs": 60 }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "signal_bar", "params": { "buffer_pct": 0.15 } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "breakeven_after_r", "params": { "r": 1 } },
+      "time_exit": { "at_time": "15:10" },
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 3 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "ema_9_21_consolidation_break_v1",
+    "name": "EMA 9/21 Consolidation Break",
+    "regime": "compression",
+    "plain_rules": "Wait for a 5-minute consolidation, defined as Bollinger bandwidth in the bottom quarter of its last 120 bars on the prior bar. Go long when the 9 EMA has crossed above the 21 EMA within the last 3 bars and the close is above both; go short on the mirror cross with the close below both. Enter with a stop order just beyond the signal bar's extreme (0.05% offset), valid for one bar. The stop sits beyond the last confirmed 3-bar swing and then trails on the 21 EMA. Take profit at 2R. Entries run from 09:20 to 15:00 with the book flat at close.",
+    "ambiguity_notes": [
+      "Consolidation is the bandwidth percentile below 25 on the prior bar, not a count of inside bars.",
+      "The EMA cross must have happened within the last 3 closed bars; an older cross does not qualify.",
+      "Entry is a break of the signal bar with a 0.05% offset; if the next bar does not break it, the signal expires.",
+      "Swing stop uses a 3-bar confirmation; the 21 EMA trail only ever tightens."
+    ],
+    "spec": {
+      "strategy_id": "ema_9_21_consolidation_break_v1",
+      "name": "EMA 9/21 Consolidation Break",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["NIFTY"],
+      "timeframe": "5m",
+      "session": { "start": "09:20", "end": "15:00", "flat_at_close": true },
+      "regime_affinity": ["compression", "trend"],
+      "inputs": {
+        "ema9": { "indicator": "ema", "params": { "length": 9 } },
+        "ema21": { "indicator": "ema", "params": { "length": 21 } },
+        "bb": { "indicator": "bbands", "params": { "length": 20, "mult": 2, "pct_window": 120 } }
+      },
+      "entry_long": [
+        { "lhs": "bb.bw_pct[-1]", "op": "<", "rhs": 25 },
+        { "lhs": "ema9", "op": "crosses_above", "rhs": "ema21", "lookback": 3 },
+        { "lhs": "close", "op": ">", "rhs": "ema9" },
+        { "lhs": "close", "op": ">", "rhs": "ema21" }
+      ],
+      "entry_short": [
+        { "lhs": "bb.bw_pct[-1]", "op": "<", "rhs": 25 },
+        { "lhs": "ema9", "op": "crosses_below", "rhs": "ema21", "lookback": 3 },
+        { "lhs": "close", "op": "<", "rhs": "ema9" },
+        { "lhs": "close", "op": "<", "rhs": "ema21" }
+      ],
+      "trigger": { "type": "break_of_signal_bar", "offset_pct": 0.05 },
+      "stop": { "type": "swing", "params": { "lookback": 3 } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "indicator", "params": { "ref": "ema21" } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 3 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "rsi_volume_extremes_v1",
+    "name": "RSI Volume Extremes",
+    "regime": "high_vol",
+    "plain_rules": "Fade a climactic 5-minute bar. Go long when RSI(14) is below 20, the bar's volume is at least 2.5 times its 20-bar median and the bar closes above its open; go short when RSI is above 80 on the same volume spike and the bar closes below its open. Fill at the next bar's open. The stop is 1.5 x ATR(14) from the entry. Take profit at 2R or close after 12 bars, whichever comes first. Entries run from 09:20 to 15:00 with the book flat at close.",
+    "ambiguity_notes": [
+      "Extreme means RSI(14) under 20 or over 80; 30/70 levels are a different, far more frequent strategy.",
+      "The volume spike is a ratio to the 20-bar median above 2.5, not a comparison with the previous bar.",
+      "The reversal bar must close against the move (green for longs, red for shorts); a doji does not qualify.",
+      "12 bars on 5-minute data is one hour; there is no trailing stop."
+    ],
+    "spec": {
+      "strategy_id": "rsi_volume_extremes_v1",
+      "name": "RSI Volume Extremes",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["BANKNIFTY"],
+      "timeframe": "5m",
+      "session": { "start": "09:20", "end": "15:00", "flat_at_close": true },
+      "regime_affinity": ["high_vol", "range"],
+      "inputs": {
+        "rsi14": { "indicator": "rsi", "params": { "length": 14 } },
+        "vr": { "indicator": "volume_ratio", "params": { "window": 20 } },
+        "atr14": { "indicator": "atr", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "rsi14", "op": "<", "rhs": 20 },
+        { "lhs": "vr", "op": ">", "rhs": 2.5 },
+        { "lhs": "close", "op": ">", "rhs": "open" }
+      ],
+      "entry_short": [
+        { "lhs": "rsi14", "op": ">", "rhs": 80 },
+        { "lhs": "vr", "op": ">", "rhs": 2.5 },
+        { "lhs": "close", "op": "<", "rhs": "open" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "atr", "params": { "length": 14, "mult": 1.5 } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "none", "params": {} },
+      "time_exit": { "max_bars": 12 },
+      "risk": { "min_rr_after_costs": 2, "max_equity_risk_pct": 0.25, "max_trades_per_day": 3 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "ichimoku_swing_v1",
+    "name": "Ichimoku Swing",
+    "regime": "trend",
+    "plain_rules": "On daily bars, go long when the Tenkan line crosses above the Kijun line while the close is above both edges of the cloud; go short when Tenkan crosses below Kijun with the close under both cloud edges. Fill at the next day's open. The stop is the Kijun line and trails with it. Take profit at 3R or let the Kijun trail exit the trade. Positions are held overnight across the full 09:15 to 15:30 session with no flat-at-close.",
+    "ambiguity_notes": [
+      "Standard 9/26/52 settings with a 26-bar displacement; other settings are a different strategy.",
+      "Above the cloud means the close is above both Senkou A and Senkou B, not just the nearer edge.",
+      "The Chikou span is not checked.",
+      "The Kijun line is both the initial stop and the trail; it must be on the correct side of the close at signal time or the signal is skipped."
+    ],
+    "spec": {
+      "strategy_id": "ichimoku_swing_v1",
+      "name": "Ichimoku Swing",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["LT", "SBIN"],
+      "timeframe": "1D",
+      "session": { "start": "09:15", "end": "15:30", "flat_at_close": false },
+      "regime_affinity": ["trend"],
+      "inputs": {
+        "ichi": { "indicator": "ichimoku", "params": { "tenkan": 9, "kijun": 26, "senkou_b": 52, "displacement": 26 } }
+      },
+      "entry_long": [
+        { "lhs": "ichi.tenkan", "op": "crosses_above", "rhs": "ichi.kijun" },
+        { "lhs": "close", "op": ">", "rhs": "ichi.senkou_a" },
+        { "lhs": "close", "op": ">", "rhs": "ichi.senkou_b" }
+      ],
+      "entry_short": [
+        { "lhs": "ichi.tenkan", "op": "crosses_below", "rhs": "ichi.kijun" },
+        { "lhs": "close", "op": "<", "rhs": "ichi.senkou_a" },
+        { "lhs": "close", "op": "<", "rhs": "ichi.senkou_b" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "indicator", "params": { "ref": "ichi.kijun" } },
+      "targets": [{ "type": "rr", "value": 3 }],
+      "trailing": { "type": "indicator", "params": { "ref": "ichi.kijun" } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 2, "max_equity_risk_pct": 0.5, "max_trades_per_day": 1 },
+      "automation_permission": "mentor_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "fractal_50sma_v1",
+    "name": "Fractal 50 SMA",
+    "regime": "trend",
+    "plain_rules": "Trade in the direction of a rising or falling 50 SMA on 30-minute bars. Go long when the close is above the 50 SMA, the SMA has risen on each of the last 10 bars, and the close breaks above the last confirmed 2-bar fractal high; go short when the close is below a falling 50 SMA and breaks below the last fractal low. Fill at the next bar's open. The stop sits at the opposite fractal and moves to breakeven after 1R. Take profit at 2R. Entries run from 09:15 to 15:15 with the book flat at close.",
+    "ambiguity_notes": [
+      "A fractal is a 2-bar swing (highest high of 5 bars), confirmed two bars later; a 5-bar swing is a different strategy.",
+      "Rising SMA means it rose on every one of the last 10 bars, not just that it is higher than 10 bars ago.",
+      "The break is a close beyond the fractal, not an intrabar tag.",
+      "The stop is the opposite confirmed fractal, which may be further away than a fixed ATR stop."
+    ],
+    "spec": {
+      "strategy_id": "fractal_50sma_v1",
+      "name": "Fractal 50 SMA",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["RELIANCE"],
+      "timeframe": "30m",
+      "session": { "start": "09:15", "end": "15:15", "flat_at_close": true },
+      "regime_affinity": ["trend"],
+      "inputs": {
+        "sma50": { "indicator": "sma", "params": { "length": 50 } },
+        "sw": { "indicator": "swing", "params": { "lookback": 2 } }
+      },
+      "entry_long": [
+        { "lhs": "close", "op": ">", "rhs": "sma50" },
+        { "lhs": "sma50", "op": "rising", "rhs": "sma50", "lookback": 10 },
+        { "lhs": "close", "op": "crosses_above", "rhs": "sw.high" }
+      ],
+      "entry_short": [
+        { "lhs": "close", "op": "<", "rhs": "sma50" },
+        { "lhs": "sma50", "op": "falling", "rhs": "sma50", "lookback": 10 },
+        { "lhs": "close", "op": "crosses_below", "rhs": "sw.low" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "swing", "params": { "lookback": 2 } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "breakeven_after_r", "params": { "r": 1 } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 2 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "vcp_v1",
+    "name": "Volatility Contraction Pattern",
+    "regime": "compression",
+    "plain_rules": "On daily bars, look for a stock above its 50 SMA whose Bollinger bandwidth is in the bottom 15% of its last 120 days and whose ATR(14) is lower than it was 20 days ago. Go long when the close breaks above the prior day's 20-day Donchian high on volume at least 1.5 times its 20-day median. Long only. Fill at the next day's open. The stop sits under the last confirmed 5-day swing low and an ATR(14) x 3 trail follows the move. Take profit at 3R. Positions are held overnight; no flat-at-close.",
+    "ambiguity_notes": [
+      "Contraction is measured two ways at once: bandwidth percentile under 15 and ATR lower than 20 days ago; the template does not count the number of pullback legs.",
+      "The breakout level is the prior day's 20-day high, so the breakout bar itself is not part of the level.",
+      "Volume confirmation is a ratio to the 20-day median above 1.5.",
+      "Long only; no short version is defined."
+    ],
+    "spec": {
+      "strategy_id": "vcp_v1",
+      "name": "Volatility Contraction Pattern",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["TCS", "INFY"],
+      "timeframe": "1D",
+      "session": { "start": "09:15", "end": "15:30", "flat_at_close": false },
+      "regime_affinity": ["compression", "trend"],
+      "inputs": {
+        "bb": { "indicator": "bbands", "params": { "length": 20, "mult": 2, "pct_window": 120 } },
+        "atr14": { "indicator": "atr", "params": { "length": 14 } },
+        "sma50": { "indicator": "sma", "params": { "length": 50 } },
+        "dc": { "indicator": "donchian", "params": { "length": 20 } },
+        "vr": { "indicator": "volume_ratio", "params": { "window": 20 } }
+      },
+      "entry_long": [
+        { "lhs": "close", "op": ">", "rhs": "sma50" },
+        { "lhs": "bb.bw_pct[-1]", "op": "<", "rhs": 15 },
+        { "lhs": "atr14", "op": "<", "rhs": "atr14[-20]" },
+        { "lhs": "close", "op": "crosses_above", "rhs": "dc.upper[-1]" },
+        { "lhs": "vr", "op": ">", "rhs": 1.5 }
+      ],
+      "entry_short": null,
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "swing", "params": { "lookback": 5 } },
+      "targets": [{ "type": "rr", "value": 3 }],
+      "trailing": { "type": "atr", "params": { "length": 14, "mult": 3 } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 2, "max_equity_risk_pct": 0.5, "max_trades_per_day": 1 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "two_legged_pullback_v1",
+    "name": "Two-Legged Pullback",
+    "regime": "trend",
+    "plain_rules": "Trade with a 21 EMA that has risen on each of the last 10 bars while ADX(14) is above 20. A two-legged pullback is recognised when the previous bar's low is below the low three bars ago and the current 15-minute bar makes a higher low while closing above the 21 EMA; go long there. Go short on the mirror pattern under a falling 21 EMA. Fill at the next bar's open. The stop sits beyond the last confirmed 3-bar swing and moves to breakeven after 1R. Take profit at 2R. Entries run from 09:30 to 15:15 with the book flat at close.",
+    "ambiguity_notes": [
+      "The second leg is defined as the previous bar's low being below the low three bars earlier; the template does not count legs by swing points.",
+      "The turn is the current bar making a higher low than the previous bar and closing above the 21 EMA.",
+      "Trend requires the 21 EMA to have risen on every one of the last 10 bars; a single down-tick disqualifies the setup.",
+      "Swing stop uses a 3-bar confirmation."
+    ],
+    "spec": {
+      "strategy_id": "two_legged_pullback_v1",
+      "name": "Two-Legged Pullback",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["ICICIBANK", "AXISBANK"],
+      "timeframe": "15m",
+      "session": { "start": "09:30", "end": "15:15", "flat_at_close": true },
+      "regime_affinity": ["trend"],
+      "inputs": {
+        "ema21": { "indicator": "ema", "params": { "length": 21 } },
+        "adx": { "indicator": "adx", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "ema21", "op": "rising", "rhs": "ema21", "lookback": 10 },
+        { "lhs": "adx.adx", "op": ">", "rhs": 20 },
+        { "lhs": "low[-1]", "op": "<", "rhs": "low[-3]" },
+        { "lhs": "low", "op": ">", "rhs": "low[-1]" },
+        { "lhs": "close", "op": ">", "rhs": "ema21" }
+      ],
+      "entry_short": [
+        { "lhs": "ema21", "op": "falling", "rhs": "ema21", "lookback": 10 },
+        { "lhs": "adx.adx", "op": ">", "rhs": 20 },
+        { "lhs": "high[-1]", "op": ">", "rhs": "high[-3]" },
+        { "lhs": "high", "op": "<", "rhs": "high[-1]" },
+        { "lhs": "close", "op": "<", "rhs": "ema21" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "swing", "params": { "lookback": 3 } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "breakeven_after_r", "params": { "r": 1 } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 2 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "pin_bar_range_reversal_v1",
+    "name": "Pin Bar Range Reversal",
+    "regime": "range",
+    "plain_rules": "Only trade when ADX(14) is below 20. Go long when a 15-minute bar's low pierces the lower Bollinger band (20, 2) but the bar closes back inside the band and above its open; go short when the high pierces the upper band and the bar closes back inside and below its open. Fill at the next bar's open. The stop sits 0.1% beyond the signal bar's wick. The target is the Bollinger middle band, and the trade is closed after 16 bars if it has not been reached. Entries run from 09:30 to 15:10 with the book flat at close.",
+    "ambiguity_notes": [
+      "A pin bar here means the wick went outside the band while the close came back inside with the body on the right side; the wick-to-body ratio is not measured.",
+      "The range filter is ADX below 20.",
+      "The target is the middle band at exit time, which moves; there is no fixed R target.",
+      "16 bars on 15-minute data is four hours."
+    ],
+    "spec": {
+      "strategy_id": "pin_bar_range_reversal_v1",
+      "name": "Pin Bar Range Reversal",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["NIFTY"],
+      "timeframe": "15m",
+      "session": { "start": "09:30", "end": "15:10", "flat_at_close": true },
+      "regime_affinity": ["range"],
+      "inputs": {
+        "bb": { "indicator": "bbands", "params": { "length": 20, "mult": 2, "pct_window": 120 } },
+        "adx": { "indicator": "adx", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "adx.adx", "op": "<", "rhs": 20 },
+        { "lhs": "low", "op": "<", "rhs": "bb.lower" },
+        { "lhs": "close", "op": ">", "rhs": "bb.lower" },
+        { "lhs": "close", "op": ">", "rhs": "open" }
+      ],
+      "entry_short": [
+        { "lhs": "adx.adx", "op": "<", "rhs": 20 },
+        { "lhs": "high", "op": ">", "rhs": "bb.upper" },
+        { "lhs": "close", "op": "<", "rhs": "bb.upper" },
+        { "lhs": "close", "op": "<", "rhs": "open" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "signal_bar", "params": { "buffer_pct": 0.1 } },
+      "targets": [{ "type": "indicator", "value": 0, "ref": "bb.mid" }],
+      "trailing": { "type": "none", "params": {} },
+      "time_exit": { "max_bars": 16 },
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 3 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "dow_structure_break_v1",
+    "name": "Dow Structure Break",
+    "regime": "trend",
+    "plain_rules": "Read market structure from confirmed 5-bar swings on 30-minute bars. Go long when the last confirmed swing low is higher than the one in force 10 bars ago (a higher low) and the close breaks above the last confirmed swing high (a higher high); go short when the swing high has stepped down and the close breaks below the last swing low. Fill at the next bar's open. The stop sits at the opposite swing and moves to breakeven after 1R. Take profit at 2R. Entries run from 09:15 to 15:15 with the book flat at close.",
+    "ambiguity_notes": [
+      "Swing points use a 5-bar confirmation on each side; a 3-bar swing is a different strategy.",
+      "A higher low means the swing-low level now is above the level that was in force 10 bars ago.",
+      "The break is a close above the swing high, not a wick.",
+      "Only the most recent swing pair is used; the template does not check for a longer series of higher highs."
+    ],
+    "spec": {
+      "strategy_id": "dow_structure_break_v1",
+      "name": "Dow Structure Break",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["HDFCBANK", "KOTAKBANK"],
+      "timeframe": "30m",
+      "session": { "start": "09:15", "end": "15:15", "flat_at_close": true },
+      "regime_affinity": ["trend"],
+      "inputs": {
+        "sw": { "indicator": "swing", "params": { "lookback": 5 } }
+      },
+      "entry_long": [
+        { "lhs": "sw.low", "op": ">", "rhs": "sw.low[-10]" },
+        { "lhs": "close", "op": "crosses_above", "rhs": "sw.high" }
+      ],
+      "entry_short": [
+        { "lhs": "sw.high", "op": "<", "rhs": "sw.high[-10]" },
+        { "lhs": "close", "op": "crosses_below", "rhs": "sw.low" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "swing", "params": { "lookback": 5 } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "breakeven_after_r", "params": { "r": 1 } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 2 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "first_hour_ema_reversion_v1",
+    "name": "First Hour EMA Reversion",
+    "regime": "range",
+    "plain_rules": "Fade an opening-hour stretch on 5-minute bars. Between 09:20 and 10:15, go long when the close is below the lower 1-sigma VWAP band with RSI(14) under 30 and the bar closes above its open; go short when the close is above the upper 1-sigma band with RSI over 70 and the bar closes below its open. Fill at the next bar's open. The stop sits 0.1% beyond the signal bar's extreme. The target is the 21 EMA; whatever is still open is closed at 11:15 or after 12 bars, whichever comes first.",
+    "ambiguity_notes": [
+      "Entries are only taken while the session window (09:20 to 10:15) is open; signals after that are ignored.",
+      "The stretch is measured against the 1-sigma VWAP band, not the 2-sigma band.",
+      "The target is the 21 EMA at exit time, which moves toward price; there is no fixed R target.",
+      "The hard time exit at 11:15 applies even if the position is still profitable."
+    ],
+    "spec": {
+      "strategy_id": "first_hour_ema_reversion_v1",
+      "name": "First Hour EMA Reversion",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["BANKNIFTY"],
+      "timeframe": "5m",
+      "session": { "start": "09:20", "end": "10:15", "flat_at_close": true },
+      "regime_affinity": ["range", "high_vol"],
+      "inputs": {
+        "ema21": { "indicator": "ema", "params": { "length": 21 } },
+        "vw": { "indicator": "vwap", "params": {} },
+        "rsi14": { "indicator": "rsi", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "close", "op": "<", "rhs": "vw.lower1" },
+        { "lhs": "rsi14", "op": "<", "rhs": 30 },
+        { "lhs": "close", "op": ">", "rhs": "open" }
+      ],
+      "entry_short": [
+        { "lhs": "close", "op": ">", "rhs": "vw.upper1" },
+        { "lhs": "rsi14", "op": ">", "rhs": 70 },
+        { "lhs": "close", "op": "<", "rhs": "open" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "signal_bar", "params": { "buffer_pct": 0.1 } },
+      "targets": [{ "type": "indicator", "value": 0, "ref": "ema21" }],
+      "trailing": { "type": "none", "params": {} },
+      "time_exit": { "max_bars": 12, "at_time": "11:15" },
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.25, "max_trades_per_day": 2 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "double_rsi_mtf_v1",
+    "name": "Double RSI Multi-Timeframe",
+    "regime": "trend",
+    "plain_rules": "Use a slow RSI(50) as the higher-timeframe bias and a fast RSI(5) as the timing tool, both on 15-minute bars. Go long when RSI(50) is above 55, the close is above the 21 EMA, and RSI(5) crosses up through 30; go short when RSI(50) is below 45, the close is under the 21 EMA, and RSI(5) crosses down through 70. Fill at the next bar's open. The stop sits beyond the last confirmed 5-bar swing and moves to breakeven after 1R. Take profit at 2R. Entries run from 09:30 to 15:15 with the book flat at close.",
+    "ambiguity_notes": [
+      "The higher timeframe is approximated by a 50-period RSI on the same 15-minute bars rather than a separate hourly series.",
+      "Bias thresholds are 55 and 45; a 50 line is a different strategy.",
+      "The timing signal is the RSI(5) cross of 30 (70 for shorts) on a closed bar.",
+      "Swing stop uses a 5-bar confirmation."
+    ],
+    "spec": {
+      "strategy_id": "double_rsi_mtf_v1",
+      "name": "Double RSI Multi-Timeframe",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["RELIANCE", "SBIN"],
+      "timeframe": "15m",
+      "session": { "start": "09:30", "end": "15:15", "flat_at_close": true },
+      "regime_affinity": ["trend"],
+      "inputs": {
+        "rsi50": { "indicator": "rsi", "params": { "length": 50 } },
+        "rsi5": { "indicator": "rsi", "params": { "length": 5 } },
+        "ema21": { "indicator": "ema", "params": { "length": 21 } }
+      },
+      "entry_long": [
+        { "lhs": "rsi50", "op": ">", "rhs": 55 },
+        { "lhs": "close", "op": ">", "rhs": "ema21" },
+        { "lhs": "rsi5", "op": "crosses_above", "rhs": 30 }
+      ],
+      "entry_short": [
+        { "lhs": "rsi50", "op": "<", "rhs": 45 },
+        { "lhs": "close", "op": "<", "rhs": "ema21" },
+        { "lhs": "rsi5", "op": "crosses_below", "rhs": 70 }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "swing", "params": { "lookback": 5 } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "breakeven_after_r", "params": { "r": 1 } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 3 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "psar_heikin_ashi_scalp_v1",
+    "name": "PSAR Heikin Ashi Scalp",
+    "regime": "high_vol",
+    "plain_rules": "On 3-minute bars, go long when the Parabolic SAR (0.02, 0.2) has just flipped below price (it was above the previous bar's high and is now below this bar's low) and the Heikin Ashi candle is green with a higher HA close than the previous bar; go short on the mirror flip with a red HA candle. Fill at the next bar's open. The stop is the SAR dot and trails with it every bar. Take profit at 1.5R or close after 10 bars. Entries run from 09:20 to 15:00 with the book flat at close.",
+    "ambiguity_notes": [
+      "A flip requires the SAR to have been above the prior bar's high and now be below the current bar's low; a SAR that is merely below price does not qualify.",
+      "Heikin Ashi confirmation is a green HA candle with a rising HA close; the template does not require a flat HA bottom.",
+      "The SAR is both the initial stop and the trail, so the first stop is usually tight.",
+      "Up to 6 trades a day; the 10-bar time exit is 30 minutes."
+    ],
+    "spec": {
+      "strategy_id": "psar_heikin_ashi_scalp_v1",
+      "name": "PSAR Heikin Ashi Scalp",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["NIFTY"],
+      "timeframe": "3m",
+      "session": { "start": "09:20", "end": "15:00", "flat_at_close": true },
+      "regime_affinity": ["high_vol", "trend"],
+      "inputs": {
+        "ps": { "indicator": "psar", "params": { "step": 0.02, "max_step": 0.2 } },
+        "ha": { "indicator": "heikin_ashi", "params": {} }
+      },
+      "entry_long": [
+        { "lhs": "ps[-1]", "op": ">", "rhs": "high[-1]" },
+        { "lhs": "ps", "op": "<", "rhs": "low" },
+        { "lhs": "ha.close", "op": ">", "rhs": "ha.open" },
+        { "lhs": "ha.close", "op": ">", "rhs": "ha.close[-1]" }
+      ],
+      "entry_short": [
+        { "lhs": "ps[-1]", "op": "<", "rhs": "low[-1]" },
+        { "lhs": "ps", "op": ">", "rhs": "high" },
+        { "lhs": "ha.close", "op": "<", "rhs": "ha.open" },
+        { "lhs": "ha.close", "op": "<", "rhs": "ha.close[-1]" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "indicator", "params": { "ref": "ps" } },
+      "targets": [{ "type": "rr", "value": 1.5 }],
+      "trailing": { "type": "indicator", "params": { "ref": "ps" } },
+      "time_exit": { "max_bars": 10 },
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.25, "max_trades_per_day": 6 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "one_minute_consolidation_break_v1",
+    "name": "One-Minute Consolidation Break",
+    "regime": "compression",
+    "plain_rules": "On 1-minute bars, wait for Bollinger bandwidth to sit in the bottom fifth of its last 120 bars on the prior bar. Go long when the close breaks above the prior bar's 15-bar Donchian high, the close is above the 21 EMA, and volume is at least 1.5 times its 30-bar median; go short on the mirror break of the Donchian low under the 21 EMA. Fill at the next bar's open. The stop is the Donchian midline. Take profit at 1.5R or close after 20 bars. Entries run from 09:20 to 14:45 with the book flat at close.",
+    "ambiguity_notes": [
+      "Consolidation is the bandwidth percentile below 20 on the prior bar; the template does not count bars in a box.",
+      "The breakout level is the previous bar's 15-bar Donchian high, so the breakout bar is excluded from the level.",
+      "Volume confirmation uses a 30-bar median ratio above 1.5.",
+      "The stop is the Donchian midline at signal time, which is roughly half the box height away."
+    ],
+    "spec": {
+      "strategy_id": "one_minute_consolidation_break_v1",
+      "name": "One-Minute Consolidation Break",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["BANKNIFTY"],
+      "timeframe": "1m",
+      "session": { "start": "09:20", "end": "14:45", "flat_at_close": true },
+      "regime_affinity": ["compression"],
+      "inputs": {
+        "bb": { "indicator": "bbands", "params": { "length": 20, "mult": 2, "pct_window": 120 } },
+        "dc": { "indicator": "donchian", "params": { "length": 15 } },
+        "ema21": { "indicator": "ema", "params": { "length": 21 } },
+        "vr": { "indicator": "volume_ratio", "params": { "window": 30 } }
+      },
+      "entry_long": [
+        { "lhs": "bb.bw_pct[-1]", "op": "<", "rhs": 20 },
+        { "lhs": "close", "op": "crosses_above", "rhs": "dc.upper[-1]" },
+        { "lhs": "close", "op": ">", "rhs": "ema21" },
+        { "lhs": "vr", "op": ">", "rhs": 1.5 }
+      ],
+      "entry_short": [
+        { "lhs": "bb.bw_pct[-1]", "op": "<", "rhs": 20 },
+        { "lhs": "close", "op": "crosses_below", "rhs": "dc.lower[-1]" },
+        { "lhs": "close", "op": "<", "rhs": "ema21" },
+        { "lhs": "vr", "op": ">", "rhs": 1.5 }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "indicator", "params": { "ref": "dc.mid" } },
+      "targets": [{ "type": "rr", "value": 1.5 }],
+      "trailing": { "type": "none", "params": {} },
+      "time_exit": { "max_bars": 20 },
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.25, "max_trades_per_day": 5 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "williams_r_pullback_v1",
+    "name": "Williams %R Pullback",
+    "regime": "trend",
+    "plain_rules": "Trade pullbacks inside a trend on 15-minute bars. Go long when the close is above the 50 SMA, the 21 EMA is above the 50 SMA, and Williams %R(14) crosses back up through -80; go short when the close and 21 EMA are below the 50 SMA and %R crosses down through -20. Fill at the next bar's open. The stop sits beyond the last confirmed 5-bar swing and then trails on the 21 EMA. Take profit at 2R. Entries run from 09:30 to 15:15 with the book flat at close.",
+    "ambiguity_notes": [
+      "Trend is the 21 EMA above the 50 SMA with the close above the 50 SMA; ADX is not used.",
+      "The pullback ends when %R crosses up through -80 on a closed bar; a reading below -80 that has not crossed does not qualify.",
+      "Swing stop uses a 5-bar confirmation.",
+      "The 21 EMA trail only ever tightens and can exit before the 2R target."
+    ],
+    "spec": {
+      "strategy_id": "williams_r_pullback_v1",
+      "name": "Williams %R Pullback",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_EQ",
+      "instruments": ["INFY", "LT"],
+      "timeframe": "15m",
+      "session": { "start": "09:30", "end": "15:15", "flat_at_close": true },
+      "regime_affinity": ["trend"],
+      "inputs": {
+        "wr": { "indicator": "williams_r", "params": { "length": 14 } },
+        "ema21": { "indicator": "ema", "params": { "length": 21 } },
+        "sma50": { "indicator": "sma", "params": { "length": 50 } }
+      },
+      "entry_long": [
+        { "lhs": "close", "op": ">", "rhs": "sma50" },
+        { "lhs": "ema21", "op": ">", "rhs": "sma50" },
+        { "lhs": "wr", "op": "crosses_above", "rhs": -80 }
+      ],
+      "entry_short": [
+        { "lhs": "close", "op": "<", "rhs": "sma50" },
+        { "lhs": "ema21", "op": "<", "rhs": "sma50" },
+        { "lhs": "wr", "op": "crosses_below", "rhs": -20 }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "swing", "params": { "lookback": 5 } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "indicator", "params": { "ref": "ema21" } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5, "max_trades_per_day": 3 },
+      "automation_permission": "paper_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  },
+  {
+    "id": "daily_pivot_macro_trend_v1",
+    "name": "Daily Pivot Macro Trend",
+    "regime": "event",
+    "plain_rules": "On daily bars, treat a close through the prior day's R1 or S1 on heavy volume as an event. Go long when the daily close crosses above R1 with volume at least 1.5 times its 20-day median and the close above the 50 SMA; go short when the close crosses below S1 on the same volume with the close below the 50 SMA. Fill at the next day's open. The stop is the prior day's central pivot and an ATR(14) x 2 trail follows the move. Take profit at 2R. Positions are held overnight with no flat-at-close.",
+    "ambiguity_notes": [
+      "Pivots are the standard floor pivots from the prior day's high, low and close.",
+      "The event is a daily close crossing R1 (S1 for shorts); an intraday tag is not enough.",
+      "Volume confirmation is a ratio to the 20-day median above 1.5; the template does not read a news calendar.",
+      "The stop is the central pivot, which can be far from the entry on a wide-range day and may make the signal skip."
+    ],
+    "spec": {
+      "strategy_id": "daily_pivot_macro_trend_v1",
+      "name": "Daily Pivot Macro Trend",
+      "version": 1,
+      "parent_id": null,
+      "market": "NSE_FO",
+      "instruments": ["NIFTY", "BANKNIFTY"],
+      "timeframe": "1D",
+      "session": { "start": "09:15", "end": "15:30", "flat_at_close": false },
+      "regime_affinity": ["event", "trend"],
+      "inputs": {
+        "piv": { "indicator": "pivots", "params": {} },
+        "vr": { "indicator": "volume_ratio", "params": { "window": 20 } },
+        "sma50": { "indicator": "sma", "params": { "length": 50 } },
+        "atr14": { "indicator": "atr", "params": { "length": 14 } }
+      },
+      "entry_long": [
+        { "lhs": "close", "op": "crosses_above", "rhs": "piv.r1" },
+        { "lhs": "vr", "op": ">", "rhs": 1.5 },
+        { "lhs": "close", "op": ">", "rhs": "sma50" }
+      ],
+      "entry_short": [
+        { "lhs": "close", "op": "crosses_below", "rhs": "piv.s1" },
+        { "lhs": "vr", "op": ">", "rhs": 1.5 },
+        { "lhs": "close", "op": "<", "rhs": "sma50" }
+      ],
+      "trigger": { "type": "next_bar_open" },
+      "stop": { "type": "indicator", "params": { "ref": "piv.pp" } },
+      "targets": [{ "type": "rr", "value": 2 }],
+      "trailing": { "type": "atr", "params": { "length": 14, "mult": 2 } },
+      "time_exit": {},
+      "risk": { "min_rr_after_costs": 2, "max_equity_risk_pct": 0.5, "max_trades_per_day": 1 },
+      "automation_permission": "mentor_only",
+      "ambiguity_flags": [],
+      "version_locked": false
+    }
+  }
+]

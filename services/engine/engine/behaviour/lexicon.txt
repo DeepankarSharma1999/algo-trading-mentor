@@ -1,0 +1,50 @@
+# Revenge / FOMO lexicon. One phrase per line, case-insensitive substring match on journal text.
+# Lines starting with # are comments. Editing this file changes what moves a user to ELEVATED.
+revenge
+get it back
+make it back
+win it back
+make back
+double down
+doubling down
+size up
+sized up
+bigger size
+go bigger
+all in
+all-in
+can't miss
+cannot miss
+missing out
+fomo
+chase
+chased
+chasing
+jumped in
+should have taken
+should've taken
+regret not
+kicking myself
+one more trade
+just one more
+last trade of the day to recover
+recover the loss
+recover my loss
+recoup
+frustrated
+furious
+angry
+pissed
+tilt
+tilted
+on tilt
+screw the rules
+ignore the stop
+moved my stop
+widened the stop
+removed the stop
+no stop
+without a stop
+averaging down
+averaged down
+added to a loser
