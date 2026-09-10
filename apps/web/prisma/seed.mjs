@@ -50,33 +50,33 @@ async function main() {
   const oneR = 400000 * 0.005; // ₹2,000
 
   // A cloned template, validated, in paper mode.
-  const base = templates.find((t) => t.id === "bollinger_squeeze_breakout_v1") ?? templates[0];
-  const spec = base ? { ...base.spec, strategy_id: "nifty_squeeze_v1", name: "NIFTY squeeze (mine)", parent_id: base.id, instruments: ["NIFTY"], market: "NSE_FO", automation_permission: "paper_only", version_locked: true } : null;
+  const base = templates.find((t) => t.id === "two_legged_pullback_v1") ?? templates[0];
+  const spec = base ? { ...base.spec, strategy_id: "icici_pullback_v1", name: "ICICIBANK two-legged pullback (mine)", parent_id: base.id, instruments: ["ICICIBANK"], market: "NSE_EQ", automation_permission: "paper_only", version_locked: true } : null;
   if (!spec) { console.log("seed: no templates, skipping strategy"); return; }
-  const strat = await db.strategy.create({ data: { id: "nifty_squeeze_v1", userId: user.id, name: spec.name, slug: "nifty_squeeze", version: 1, parentId: base.id, status: "validated", spec, plainRules: base.plain_rules } });
-  const watcher = await db.watcher.create({ data: { userId: user.id, strategyId: strat.id, execState: "SETUP_FOUND", stateReason: "Compression regime; squeeze released on the last closed bar.", updatedAt: SIM_START } });
+  const strat = await db.strategy.create({ data: { id: "icici_pullback_v1", userId: user.id, name: spec.name, slug: "icici_pullback", version: 1, parentId: base.id, status: "validated", spec, plainRules: base.plain_rules } });
+  const watcher = await db.watcher.create({ data: { userId: user.id, strategyId: strat.id, execState: "SETUP_FOUND", stateReason: "Trend regime; higher low above the rising 21 EMA on the last closed bar.", updatedAt: SIM_START } });
 
   const signal = {
-    id: "seed_signal", strategy_id: strat.id, version: 1, timestamp: SIM_START.toISOString().replace("Z", ""), symbol: "NIFTY", regime: "compression", side: "long",
-    conditions_passed: ["bb.bw_pct < 20", "close > bb.upper", "bb.bandwidth rising (3 bars)"],
-    conditions_failed: ["vr > 1.5"],
-    trigger: { type: "next_bar_open", price: 24712.5, description: "Fill at the open of the next 15m bar, inside a 3 bps slippage band." },
-    stop: 24618.2, targets: [24901.1], quantity: 25, rupee_risk: 2357.5, portfolio_risk_pct: 0.59,
-    estimated_costs: 96.4, post_cost_rr: 1.92, automation_permission: "paper_only", ambiguity_flags: [],
+    id: "seed_signal", strategy_id: strat.id, version: 1, timestamp: SIM_START.toISOString().replace("Z", ""), symbol: "ICICIBANK", regime: "trend", side: "long",
+    conditions_passed: ["ema21 rising ema21 (within 10 bars)", "adx.adx > 20", "low[-1] < low[-3]", "low > low[-1]"],
+    conditions_failed: ["close > ema21"],
+    trigger: { type: "next_bar_open", price: 1012.4, description: "Fill at the open of the next 15m bar, inside a 3 bps slippage band." },
+    stop: 1004.1, targets: [1029.0], quantity: 240, rupee_risk: 1992.0, portfolio_risk_pct: 0.5,
+    estimated_costs: 118.6, post_cost_rr: 1.88, automation_permission: "paper_only", ambiguity_flags: [],
     gates: [
-      { name: "All entry conditions", pass: false, reason: "Volume ratio is 1.2, rule needs > 1.5." },
+      { name: "All entry conditions", pass: false, reason: "Close is 1011.9, below the 21 EMA at 1012.6." },
       { name: "Regime matches affinity", pass: true }, { name: "Post-cost R:R >= 1.5", pass: true },
       { name: "Daily risk brake", pass: true }, { name: "Weekly risk brake", pass: true }, { name: "Concurrent risk", pass: true },
       { name: "Max trades today", pass: true }, { name: "Behavioural state allows entries", pass: true }, { name: "Session window", pass: true },
     ],
     exec_state: "SETUP_FOUND", verdict: "watch",
-    sentence: "Strategy nifty_squeeze_v1 matched a compression regime. Bandwidth is rising after a squeeze and price closed above the upper band, but volume ratio is 1.2 against your rule of 1.5, so this bar is not a full setup. Watching for the next closed bar.",
+    sentence: "Strategy icici_pullback_v1 matched a trend regime. The 21 EMA has risen for 10 bars, ADX is above 20 and the bar made a higher low after a two-legged dip, but the close is under the 21 EMA, so this bar is not a full setup. Watching for the next closed bar.",
   };
   await db.signal.create({ data: { userId: user.id, watcherId: watcher.id, strategyId: strat.id, ts: SIM_START, payload: signal } });
 
   // Journal: 36 closed paper trades over the previous 8 weeks, deterministic.
   const r = rng(42);
-  const regimes = ["compression", "trend", "range", "high_vol", "trend", "compression"];
+  const regimes = ["trend", "trend", "range", "high_vol", "trend", "compression"];
   const reasons = ["target", "stop", "trailing", "time_exit", "flat_at_close"];
   const trades = [];
   let t = new Date(SIM_START); t.setUTCDate(t.getUTCDate() - 80);
@@ -85,14 +85,14 @@ async function main() {
     if (t.toISOString().slice(0, 10) >= SIM_START.toISOString().slice(0, 10)) break; // never journal the future
     const opened = new Date(t); opened.setUTCHours(9 + Math.floor(r() * 5), [0, 15, 30, 45][Math.floor(r() * 4)]);
     const held = 15 * (2 + Math.floor(r() * 12)); const closed = new Date(opened.getTime() + held * 60000);
-    const side = r() < 0.7 ? "long" : "short"; const entry = 23800 + r() * 1400; const risk = 60 + r() * 80;
+    const side = r() < 0.7 ? "long" : "short"; const entry = 940 + r() * 120; const risk = 5 + r() * 6;
     const win = r() < 0.47; const outcome = win ? +(0.8 + r() * 1.8).toFixed(2) : -+(0.6 + r() * 0.5).toFixed(2);
     const stop = side === "long" ? entry - risk : entry + risk; const target = side === "long" ? entry + 2 * risk : entry - 2 * risk;
     const slip = +(entry * 0.0003 * (0.5 + r())).toFixed(2); const actualEntry = side === "long" ? entry + slip : entry - slip;
     const exit = side === "long" ? actualEntry + outcome * risk : actualEntry - outcome * risk;
     const followed = r() < 0.8 ? 5 : 4;
     trades.push({
-      userId: user.id, strategyId: strat.id, watcherId: watcher.id, symbol: "NIFTY", side, qty: 25,
+      userId: user.id, strategyId: strat.id, watcherId: watcher.id, symbol: "ICICIBANK", side, qty: 240,
       planned: { entry: +entry.toFixed(2), stop: +stop.toFixed(2), targets: [+target.toFixed(2)], risk_r: 1 },
       actual: { entry: +actualEntry.toFixed(2), exit: +exit.toFixed(2), entry_ts: opened.toISOString().replace("Z", ""), exit_ts: closed.toISOString().replace("Z", "") },
       slippage: slip, costs: +(70 + r() * 40).toFixed(2), mfeR: +(Math.max(outcome, 0) + r() * 0.6).toFixed(2), maeR: -+(Math.max(-outcome, 0) + r() * 0.4).toFixed(2),

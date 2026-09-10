@@ -58,6 +58,17 @@ Decisions made autonomously while building phase 1. Newest at the bottom of each
   "Skip cooldown" buttons that never do anything except log the attempt; two in one session moves
   the user to ELEVATED. This keeps the behavioural machine testable without a broker.
 
+- **Index templates often size to zero at a ₹4 lakh trading bucket.** One NIFTY lot (25) with a
+  15m ATR stop risks more than 1R at the Standard profile, and the sizing rule never widens a stop to
+  fit, so the backtester skips the trade and counts it in `skipped_for_size`. This is correct behaviour
+  and the Builder shows it; the seed therefore uses a stock (ICICIBANK, lot 1) so the demo report gets
+  past stage 1.
+- **On synthetic data every template fails validation.** The generator has no exploitable structure
+  beyond volatility regimes, so out-of-sample expectancy is negative after costs. The seeded strategy
+  is marked `validated` as a fixture so the Desk has a watcher; the real validation job queued by the
+  seed writes its honest verdict (`untested`) a few seconds later. That contradiction is deliberate
+  for the demo and disappears with real data.
+
 ## Stubs
 
 - `VendorProvider` (`engine/data/provider.py`): interface documented, raises `NotImplementedError`.
