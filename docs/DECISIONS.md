@@ -31,6 +31,19 @@ Decisions made autonomously while building phase 1. Newest at the bottom of each
 - **Base data is 1-minute; higher timeframes are resampled** in the provider, so all timeframes are
   consistent and the parquet footprint stays small (1m × 2 years × 12 symbols ≈ 2.2M rows).
 - **Model default `claude-sonnet-5`** for the mentor (override with `ANTHROPIC_MODEL`).
+- **Postgres is published on host port 55432**, not 5432: many developer machines already run a local
+  Postgres on 5432 (this one did), and a silent connection to the wrong server is worse than an odd port.
+  Inside the compose network it is still `postgres:5432`.
+- **ESLint uses `typescript-eslint` + `react-hooks` directly**, not `eslint-config-next`, which fails to
+  load under current ESLint 9 (the rushstack patch error). Coverage is equivalent for this codebase.
+- **Provider prices are float32** (parquet footprint); tests compare with a 1e-6 relative tolerance.
+- **Regime affinity is not enforced in the backtester** (stage 6 must see every regime to report the
+  breakdown); the paper trader enforces it through the "Regime matches affinity" gate.
+- **Monte Carlo gate reads the bad tail**: the report shows p5/p50/p95 of max drawdown across 1000
+  trade-order resamples and gates on the 95th percentile (the drawdown only 5% of orderings exceed),
+  which is what "5th-percentile drawdown within the profile" means once drawdown is a positive number.
+- **Seed never journals the future**: seeded paper trades stop the day before the sim clock's start, so
+  the daily and weekly brakes on the strip reflect only what the simulated clock has already lived through.
 
 ## Product
 

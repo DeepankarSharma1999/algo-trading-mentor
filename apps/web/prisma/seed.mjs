@@ -79,9 +79,10 @@ async function main() {
   const regimes = ["compression", "trend", "range", "high_vol", "trend", "compression"];
   const reasons = ["target", "stop", "trailing", "time_exit", "flat_at_close"];
   const trades = [];
-  let t = new Date(SIM_START); t.setUTCDate(t.getUTCDate() - 56);
+  let t = new Date(SIM_START); t.setUTCDate(t.getUTCDate() - 80);
   for (let i = 0; i < 36; i++) {
     t = new Date(t); t.setUTCDate(t.getUTCDate() + 1 + (r() < 0.3 ? 1 : 0)); if (t.getUTCDay() === 6) t.setUTCDate(t.getUTCDate() + 2); if (t.getUTCDay() === 0) t.setUTCDate(t.getUTCDate() + 1);
+    if (t.toISOString().slice(0, 10) >= SIM_START.toISOString().slice(0, 10)) break; // never journal the future
     const opened = new Date(t); opened.setUTCHours(9 + Math.floor(r() * 5), [0, 15, 30, 45][Math.floor(r() * 4)]);
     const held = 15 * (2 + Math.floor(r() * 12)); const closed = new Date(opened.getTime() + held * 60000);
     const side = r() < 0.7 ? "long" : "short"; const entry = 23800 + r() * 1400; const risk = 60 + r() * 80;
