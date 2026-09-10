@@ -69,6 +69,11 @@ Decisions made autonomously while building phase 1. Newest at the bottom of each
   seed writes its honest verdict (`untested`) a few seconds later. That contradiction is deliberate
   for the demo and disappears with real data.
 
+- **Strategy ids are unique across the whole table**, templates included. `strategy_id` is the
+  primary key and the spec fixes its shape to `slug_vN`, so cloning "Donchian Pullback" for the first
+  time yields `donchian_pullback_2_v1` (the template holds `donchian_pullback_v1`). A per-user prefix
+  would have changed the spec's id shape.
+
 ## Stubs
 
 - `VendorProvider` (`engine/data/provider.py`): interface documented, raises `NotImplementedError`.

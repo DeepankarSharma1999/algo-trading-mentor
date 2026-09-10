@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-REPO = ROOT.parents[1]
+# In Docker /app has no grandparent; DATA_DIR and SCHEMA_DIR come from the environment there.
+REPO = ROOT.parents[1] if len(ROOT.parents) > 1 else ROOT
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://atm:atm@localhost:55432/atm")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")

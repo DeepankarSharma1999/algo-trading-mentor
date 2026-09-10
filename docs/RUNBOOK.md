@@ -30,7 +30,7 @@ python -m engine.paper.worker                            # paper trader, optiona
 ## Seed and reset
 
 - The web container runs `prisma db push` and `prisma/seed.mjs` on every start. The seed is
-  idempotent: templates are upserted, the demo user is created once (with a validated NIFTY squeeze
+  idempotent: templates are upserted, the demo user is created once (with a validated ICICIBANK two-legged pullback
   strategy in paper mode, a watcher with a rule trace, 36 closed paper trades and two journal notes),
   the sim clock is created once at 2025-06-12 10:35 IST.
 - `make seed` re-runs the seed inside the running web container.
@@ -77,7 +77,32 @@ make check          # design lint + eslint + tsc + vitest + ruff + pytest
 make e2e            # Playwright happy path against a running stack (http://localhost:3000)
 ```
 
+`make` needs GNU make (Linux, macOS, WSL, or `choco install make` on Windows). Without it, run the
+steps directly:
+
+```bash
+pnpm -r lint && pnpm -r typecheck && pnpm -r test
+cd services/engine && python -m ruff check . && python -m pytest -q
+pnpm --filter web exec playwright install chromium && pnpm --filter web e2e
+```
+
+Test counts at phase-1 completion: engine 231 (pytest), schema 18 and web 41 (vitest), Playwright 2.
 CI (`.github/workflows/ci.yml`) runs the same, plus the compose stack and Playwright.
+
+## Paper trader
+
+`paper` is a compose service. It advances the simulated clock only while `sim_clock.running` is true
+(Settings → Simulated clock → Pause/Resume). Every state change is logged as one line
+(`<sim ts> <strategy> <symbol>: FROM -> TO (reason)`) and written to `signals`. A watcher needs a
+`validated` strategy with `automation_permission = paper_only`; create one from the Builder's "Watch"
+action. Signals, open positions and closed trades appear on the Desk and in the Journal.
+
+## What "validated" means on synthetic data
+
+Nothing. The synthetic feed has no exploitable structure, so every template fails at stage 2 or later
+after costs. That is the gatekeeper working. The seeded strategy is marked `validated` as a fixture so
+the Desk has a watcher on first launch; the seed also queues a real validation job whose honest
+verdict (`untested`) lands a few seconds later and is visible on the Validation screen.
 
 ## Security prerequisites before any public deployment
 
