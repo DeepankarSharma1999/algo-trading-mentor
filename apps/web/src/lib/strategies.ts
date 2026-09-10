@@ -42,11 +42,12 @@ export async function getTemplate(id: string): Promise<TemplateRow | null> {
   return { ...row, rules: parseTemplateRules(r.plainRules, row.spec.regime_affinity?.[0] ?? "") };
 }
 
-async function mySlugs(userId: string) {
-  return (await db.strategy.findMany({ where: { userId }, select: { slug: true } })).map((s) => s.slug);
+// strategy ids are a global primary key (templates included), so uniqueness is checked across every row.
+async function allSlugs() {
+  return (await db.strategy.findMany({ select: { slug: true } })).map((s) => s.slug);
 }
-async function myIds(userId: string) {
-  return (await db.strategy.findMany({ where: { userId }, select: { id: true } })).map((s) => s.id);
+async function allIds() {
+  return (await db.strategy.findMany({ select: { id: true } })).map((s) => s.id);
 }
 
 /** Copy a template into the user's strategies as `slug_v1`, parented to the template. */
@@ -54,7 +55,7 @@ export async function cloneTemplate(userId: string, templateId: string, name?: s
   const t = await getTemplate(templateId);
   if (!t) throw new Error("That template does not exist.");
   const finalName = (name ?? t.name).trim() || t.name;
-  const id = deriveIdFromName(finalName, await mySlugs(userId));
+  const id = deriveIdFromName(finalName, await allSlugs());
   const spec = cloneSpec(t.spec, id, finalName, t.id);
   await db.strategy.create({ data: {
     id, userId, name: finalName, slug: id.replace(/_v1$/, ""), version: 1, parentId: t.id,
@@ -65,7 +66,7 @@ export async function cloneTemplate(userId: string, templateId: string, name?: s
 
 /** An empty draft `new_strategy_vN`. */
 export async function createDraft(userId: string): Promise<string> {
-  const id = newDraftId(await myIds(userId));
+  const id = newDraftId(await allIds());
   const spec = emptyDraft(id);
   await db.strategy.create({ data: { id, userId, name: spec.name, slug: "new_strategy", version: spec.version, parentId: null, status: "draft", spec: spec as object } });
   return id;
@@ -78,7 +79,7 @@ export async function createDraft(userId: string): Promise<string> {
 export async function saveSpec(userId: string, id: string, spec: Strategy): Promise<{ id: string; created: boolean; status: string }> {
   const current = await db.strategy.findFirst({ where: { id, userId } });
   if (!current) throw new Error("That strategy does not exist.");
-  const plan = planSave(current, spec, await myIds(userId));
+  const plan = planSave(current, spec, await allIds());
   if (plan.mode === "bump") {
     await db.strategy.create({ data: {
       id: plan.id, userId, name: plan.spec.name, slug: current.slug, version: plan.version, parentId: plan.previousId,

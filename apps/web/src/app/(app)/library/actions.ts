@@ -10,7 +10,8 @@ export async function cloneAction(form: FormData) {
   let id: string;
   try {
     id = await cloneTemplate(user.id, templateId);
-  } catch {
+  } catch (e) {
+    console.error("clone failed", e);
     redirect("/library?notice=" + encodeURIComponent("That template could not be cloned. Reload the Library and try again."));
   }
   redirect(`/builder/${id}`);
