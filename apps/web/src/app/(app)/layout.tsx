@@ -1,4 +1,5 @@
 import { Footer } from "@/components/Footer";
+import { Providers } from "@/components/Providers";
 import { Rail } from "@/components/Rail";
 import { Strip } from "@/components/Strip";
 import { requireUser } from "@/lib/auth";
@@ -14,7 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <Rail email={user.email} researchAllowed={strip.state === "RESEARCH"} />
       <div className="main">
         <Strip d={strip} />
-        <div className="content">{children}</div>
+        <div className="content"><Providers>{children}</Providers></div>
         <Footer provider={strip.provider} />
       </div>
     </div>
