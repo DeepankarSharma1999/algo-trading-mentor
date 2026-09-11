@@ -107,8 +107,68 @@ verdict (`untested`) lands a few seconds later and is visible on the Validation 
 ## Security prerequisites before any public deployment
 
 - The engine trusts the `X-User-Id` header. It must stay unreachable from outside the compose network,
-  or gain its own auth.
-- Set a real `SESSION_SECRET`, serve over HTTPS (cookies are `secure` in production).
+  or gain its own auth. `infra/docker-compose.prod.yml` enforces this by not publishing the engine's,
+  Postgres's or Redis's ports — only the web app is reachable from outside the VM.
+- Set a real `SESSION_SECRET` (the deploy script below generates one). Cookies are only marked
+  `secure` when `NODE_ENV=production` **and** `COOKIE_SECURE` isn't `"false"` — the prod overlay sets
+  it to `"false"` because the base setup below has no TLS; see "Add HTTPS" if you want a real
+  certificate.
+
+## Deploy to a free VM (Oracle Cloud Always Free)
+
+Runs the exact stack above, unmodified, on a VM that's free forever (not a trial). Two parts: you
+create the account and VM in Oracle's console (identity/payment verification is Oracle's requirement,
+not something that can be scripted), then the deploy script below does everything else.
+
+### 1. Create the VM (you do this, in the browser)
+
+1. Sign up at [cloud.oracle.com](https://cloud.oracle.com) (needs ID verification and a card for
+   verification only — the shapes below are billed $0 forever).
+2. **Compute → Instances → Create instance.**
+   - Image: **Canonical Ubuntu 22.04** (aarch64/ARM build).
+   - Shape: **VM.Standard.A1.Flex** (Ampere/ARM) — under "Always Free eligible", set 4 OCPUs / 24 GB
+     memory (the maximum free allowance). If A1 capacity is unavailable in your region, retry later
+     or fall back to the free `VM.Standard.E2.1.Micro` (1 GB RAM — tight for this stack, but works
+     for a light demo).
+   - Add your SSH public key (or let Oracle generate a key pair and download the private key).
+   - Create.
+3. **Networking → Virtual Cloud Networks → your VCN → Security Lists → Default Security List →
+   Add Ingress Rules**: allow TCP port **3000** from `0.0.0.0/0` (this is the actual firewall; the
+   VM's own `ufw`/`iptables` is a second, separate gate — Ubuntu images from Oracle usually ship with
+   `iptables` already open for the default ports, but if the site doesn't load after deploying, also
+   run `sudo iptables -I INPUT -p tcp --dport 3000 -j ACCEPT` on the VM).
+4. Note the instance's **public IP**.
+
+### 2. Push this repo somewhere the VM can pull it from
+
+```bash
+gh repo create algo-trading-mentor --private --source=. --remote=origin --push
+```
+
+(or push to any git remote you already use).
+
+### 3. Deploy
+
+```bash
+ssh ubuntu@<public-ip>
+curl -fsSL https://raw.githubusercontent.com/<you>/algo-trading-mentor/main/infra/deploy.sh -o deploy.sh
+REPO_URL=https://github.com/<you>/algo-trading-mentor.git bash deploy.sh
+```
+
+The first run installs Docker and exits asking you to reconnect (group membership needs a fresh
+session); run the same command again and it clones the repo, generates `infra/.env` with a random
+`SESSION_SECRET`, and runs
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`. It waits for
+`/api/health` and prints the public URL. To redeploy after a change, just re-run the script — it
+pulls and rebuilds.
+
+### Add HTTPS (optional)
+
+The setup above serves plain HTTP on port 3000. For a real certificate, point a free subdomain (e.g.
+[duckdns.org](https://www.duckdns.org)) at the VM's IP, install [Caddy](https://caddyserver.com)
+(`sudo apt install caddy`; it gets a Let's Encrypt certificate automatically), and give it a
+Caddyfile that reverse-proxies `yourname.duckdns.org` to `localhost:3000`. Once TLS is real, drop the
+`COOKIE_SECURE: "false"` line from `docker-compose.prod.yml` and redeploy.
 
 ## Stubs (see also docs/DECISIONS.md)
 

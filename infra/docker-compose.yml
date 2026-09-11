@@ -2,6 +2,7 @@ name: atm
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-atm}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atm}
@@ -15,9 +16,11 @@ services:
       retries: 20
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports: ["6379:6379"]
   engine:
     build: { context: .., dockerfile: services/engine/Dockerfile }
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-atm}:${POSTGRES_PASSWORD:-atm}@postgres:5432/${POSTGRES_DB:-atm}
       REDIS_URL: redis://redis:6379/0
@@ -31,6 +34,7 @@ services:
       postgres: { condition: service_healthy }
   paper:
     build: { context: .., dockerfile: services/engine/Dockerfile }
+    restart: unless-stopped
     command: python -m engine.paper.worker
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-atm}:${POSTGRES_PASSWORD:-atm}@postgres:5432/${POSTGRES_DB:-atm}
@@ -44,6 +48,7 @@ services:
       web: { condition: service_healthy }
   web:
     build: { context: .., dockerfile: apps/web/Dockerfile }
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-atm}:${POSTGRES_PASSWORD:-atm}@postgres:5432/${POSTGRES_DB:-atm}
       ENGINE_URL: http://engine:8000

@@ -1,0 +1,22 @@
+# Production overlay for a public VM. Use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Only the web app is reachable from outside the VM. Postgres, Redis and the engine's API stay on
+# the private compose network — the engine trusts an X-User-Id header with no auth of its own
+# (see docs/RUNBOOK.md "Security prerequisites"), so it must never be reachable from the internet.
+# The `!reset` tag needs Docker Compose v2.24+ (deploy.sh installs Docker fresh via get.docker.com,
+# which always ships current); an older compose would silently merge instead of clearing the list —
+# confirm with `docker compose -f docker-compose.yml -f docker-compose.prod.yml config` that postgres,
+# redis and engine show no `ports:` before trusting this on a public host.
+services:
+  postgres:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  engine:
+    ports: !reset []
+  web:
+    environment:
+      # No TLS is terminated by default (see RUNBOOK "Add HTTPS"), so the session cookie must not
+      # require it, or sign-in will silently fail over plain HTTP.
+      COOKIE_SECURE: "false"
