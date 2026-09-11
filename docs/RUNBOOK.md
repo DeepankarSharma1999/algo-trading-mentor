@@ -151,8 +151,8 @@ gh repo create algo-trading-mentor --private --source=. --remote=origin --push
 
 ```bash
 ssh ubuntu@<public-ip>
-curl -fsSL https://raw.githubusercontent.com/<you>/algo-trading-mentor/main/infra/deploy.sh -o deploy.sh
-REPO_URL=https://github.com/<you>/algo-trading-mentor.git bash deploy.sh
+curl -fsSL https://raw.githubusercontent.com/DeepankarSharma1999/algo-trading-mentor/main/infra/deploy.sh -o deploy.sh
+REPO_URL=https://github.com/DeepankarSharma1999/algo-trading-mentor.git bash deploy.sh
 ```
 
 The first run installs Docker and exits asking you to reconnect (group membership needs a fresh
