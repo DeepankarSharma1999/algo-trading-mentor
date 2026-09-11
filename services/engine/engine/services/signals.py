@@ -214,10 +214,21 @@ def build_signal(
             "We can log it in paper mode and journal what would have happened."
         )
     else:
-        if passed:
-            sentence = f"{'; '.join(passed)}, but {'; '.join(failed) or 'no setup'}, so this bar is not a full setup. Watching for the next closed bar."
+        def _list(items: list[str]) -> str:
+            return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+        if passed and failed:
+            sentence = (
+                f"{len(passed)} of {len(passed) + len(failed)} entry conditions hold: {_list(passed)}. "
+                f"Still missing: {_list(failed)}. Not a full setup; watching for the next closed bar."
+            )
+        elif passed:
+            sentence = f"Every entry condition holds ({_list(passed)}) but no side is armed yet. Watching for the next closed bar."
         else:
-            sentence = f"No entry condition is met on this bar ({'; '.join(failed) or 'no entry rule'}), so this bar is not a full setup. Watching for the next closed bar."
+            sentence = (
+                f"No entry condition is met on this bar (needs {_list(failed) if failed else 'an entry rule'}). "
+                "Watching for the next closed bar."
+            )
     if not guardrail(sentence, {x.root for x in spec.instruments}).ok:
         sentence = f"Strategy {spec.strategy_id} evaluated the last closed bar: verdict {verdict}. Watching for the next closed bar."
 

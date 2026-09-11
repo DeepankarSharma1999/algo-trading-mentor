@@ -1,7 +1,8 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { JobStatus } from "@/lib/types";
-import { STAGE_COUNT, headline, isActive, keyMetrics, openByDefault, stagesOf, statusWord } from "../report";
+import { STAGE_CHECKS, STAGE_COUNT, gateClass, headline, isActive, keyMetrics, openByDefault, stagesOf, statusWord } from "../report";
 import { StageDetail } from "./StageDetail";
 
 const POLL_MS = 1500;
@@ -47,19 +48,24 @@ export function Checklist({ initial }: { initial: JobStatus }) {
       {head.mono ? (
         <p className="mono" data-testid="headline" style={{ margin: "0 0 6px" }}>{head.text}</p>
       ) : (
-        <p className="h-display" data-testid="headline" style={{ fontSize: "var(--fs-4)", margin: "0 0 6px", maxWidth: 760 }}>{head.text}</p>
+        <>
+          <p className="h-display" data-testid="headline" style={{ fontSize: "var(--fs-4)", margin: "0 0 6px", maxWidth: 760 }}>{head.text}</p>
+          <p className="help" style={{ margin: "0 0 6px" }}>
+            The sentence names the stage with the least margin, even on a run that passed. <Link href="/help">The eight stages are listed in Help.</Link>
+          </p>
+        </>
       )}
       {isActive(job) && (
-        <p className="muted" style={{ margin: 0 }}>
+        <p className="help" style={{ margin: 0 }} role="status">
           {source === "db" ? "The engine is not answering; showing the last stage it wrote to the database. " : ""}
           {pollError ? `Polling paused: ${pollError}. ` : ""}
-          Stages fill in as they finish.
+          This page updates on its own. Stages fill in as they finish; nothing to refresh.
         </p>
       )}
       {job.status === "failed" && job.error && <div className="notice notice--blocked" role="alert">{job.error}</div>}
 
       <div className="section">
-        <span className="label">Stages · {job.status === "done" ? (job.report?.passed ? "validated" : "not validated") : job.status}</span>
+        <span className="label">Stages · {job.status === "done" ? (job.report?.passed ? "validated" : "not validated") : job.status === "running" ? `running stage ${Math.max(1, Math.min(STAGE_COUNT, job.current_stage || 1))} of ${STAGE_COUNT}` : job.status}</span>
         <div className="ledger" data-testid="stages">
           {stages.map((s) => {
             const sw = statusWord(s.status);
@@ -71,11 +77,15 @@ export function Checklist({ initial }: { initial: JobStatus }) {
                 <div style={{ minWidth: 0 }}>
                   <div className="cluster" style={{ gap: 10 }}>
                     <span>{s.name}</span>
-                    <span className={sw.cls} data-testid={`status-${s.stage}`}>{running ? "RUNNING" : sw.word}</span>
+                    <span className={sw.cls} data-testid={`status-${s.stage}`}>
+                      <span className={gateClass(s.status, running)} aria-hidden="true" />
+                      {running ? "RUNNING" : sw.word}
+                    </span>
                   </div>
-                  {s.summary && <div className="muted" style={{ marginTop: 3 }}>{s.summary}</div>}
+                  <div className="help" style={{ marginTop: 2 }}>{STAGE_CHECKS[s.stage]}</div>
+                  {s.summary && <div className="muted" style={{ marginTop: 5 }}>{s.summary}</div>}
                   {s.status === "pending" && !s.summary && (
-                    <div className="faint" style={{ marginTop: 3 }}>{running ? "Running now." : job.status === "failed" ? "Not reached." : job.status === "done" ? "Not reached; an earlier stage failed." : "Waiting for the earlier stages."}</div>
+                    <div className="faint" style={{ marginTop: 5 }}>{running ? "Running now." : job.status === "failed" ? "Not reached." : job.status === "done" ? "Not reached; an earlier stage failed." : "Waiting for the earlier stages."}</div>
                   )}
                   {keyMetrics(s).length > 0 && (
                     <div className="cluster mono" style={{ gap: 14, marginTop: 5, fontSize: "var(--fs-1)" }}>
@@ -99,8 +109,8 @@ export function Checklist({ initial }: { initial: JobStatus }) {
             );
           })}
         </div>
-        <p className="faint mono" style={{ marginTop: 8, fontSize: "var(--fs-1)" }}>
-          {STAGE_COUNT} stages · job {job.id} · stages 1–5 and 7 are hard gates
+        <p className="help" style={{ marginTop: 8 }}>
+          <span className="mono">{STAGE_COUNT} stages · job {job.id}</span> · Stages 1 to 5 and 7 are hard gates: a FAIL there stops the run. Stages 6 and 8 report but never fail. SKIP means the stage did not have enough data yet.
         </p>
       </div>
     </>

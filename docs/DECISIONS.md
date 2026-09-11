@@ -74,6 +74,10 @@ Decisions made autonomously while building phase 1. Newest at the bottom of each
   time yields `donchian_pullback_2_v1` (the template holds `donchian_pullback_v1`). A per-user prefix
   would have changed the spec's id shape.
 
+- **Type scale raised one notch and touch targets set to 40px** after the usability review; the
+  ledger identity is unchanged. A Help page with a glossary and a "start here" checklist on an empty
+  Desk replace the assumption that users know what 1R, brakes and gates mean.
+
 ## Stubs
 
 - `VendorProvider` (`engine/data/provider.py`): interface documented, raises `NotImplementedError`.

@@ -24,6 +24,7 @@ export function slugify(name: string): string {
 
 /** Render a condition as a rule expression for the UI and the journal. */
 export function conditionText(c: { lhs: string | number; op: string; rhs: string | number; lookback?: number }): string {
+  if (c.op === "rising" || c.op === "falling") return `${c.lhs} ${c.op} over ${c.lookback ?? 3} bars`;
   const lb = c.lookback ? ` (within ${c.lookback} bars)` : "";
   return `${c.lhs} ${c.op.replace(/_/g, " ")} ${c.rhs}${lb}`;
 }

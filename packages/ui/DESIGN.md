@@ -50,8 +50,16 @@ All tokens live in `tokens.css`. Three theme states are implemented: bare `:root
 | `--watch` | `#9A5B00` | `#E0A64A` |
 | `--blocked` | `#A82A2A` | `#E06A6A` |
 
-Type scale: 12 / 13.5 / 15 / 18 / 24 / 34. Faces: Instrument Serif (display), Familjen Grotesk (UI),
-JetBrains Mono (figures, `font-variant-numeric: tabular-nums`).
+Type scale: 13 / 15 / 16 / 19 / 26 / 36 (raised one notch from the brief's 12 / 13.5 / 15 / 18 / 24 / 34
+after usability review: 13.5px body and 10px strip labels were below comfortable reading size). Faces:
+Instrument Serif (display), Familjen Grotesk (UI), JetBrains Mono (figures, `font-variant-numeric: tabular-nums`).
+
+Usability rules that sit on top of the identity: every clickable thing is at least 40px tall
+(`--target`); `:focus-visible` draws a 2px accent ring; every page opens with one `.page-intro`
+paragraph saying what the page is for; helper text (`.help`) sits under any input whose meaning is
+not obvious; empty states (`.empty`) say what to do next and offer one button; long content folds
+behind `details.fold` with a visible Show/Hide; the rail lists each section with a one-line
+description; under 900px the rail becomes a horizontal `.topnav` and ledger rows stack.
 
 Layout: `--rail-w: 200px` fixed left rail with section list in mono; `--strip-h: 44px` persistent top
 strip carrying risk budget and behavioural state; content is a single column of ledger rows,

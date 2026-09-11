@@ -30,15 +30,16 @@
   --font-display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
   --font-ui: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
-  --fs-1: 12px;  --fs-2: 13.5px; --fs-3: 15px; --fs-4: 18px; --fs-5: 24px; --fs-6: 34px;
-  --fs-label: 11.5px; --ls-label: 0.12em;
-  --lh-tight: 1.2; --lh-body: 1.45;
+  --fs-1: 13px;  --fs-2: 15px; --fs-3: 16px; --fs-4: 19px; --fs-5: 26px; --fs-6: 36px;
+  --fs-label: 12px; --ls-label: 0.10em;
+  --lh-tight: 1.2; --lh-body: 1.55;
+  --target: 40px;  /* minimum height of anything clickable */
 
   /* layout */
   --rail-w: 200px;
-  --strip-h: 44px;
+  --strip-h: 48px;
   --gutter: 24px;
-  --row-py: 10px;
+  --row-py: 12px;
   --label-col: 200px;
   --content-max: 1080px;
 

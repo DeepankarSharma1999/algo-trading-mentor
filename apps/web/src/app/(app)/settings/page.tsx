@@ -12,6 +12,11 @@ import { ThemeSetter } from "./ThemeSetter";
 export const dynamic = "force-dynamic";
 
 const SPEEDS = [1, 2, 5, 10, 30, 60];
+const THEMES: { value: "system" | "light" | "dark"; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
 
 /** Every setting as a ledger row. Reads Postgres only; each control's action tells the engine and fails soft. */
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ notice?: string; tone?: string }> }) {
@@ -35,14 +40,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <h1 className="h-display">Settings</h1>
         <span className="cluster"><span className="mono muted">{user.email}</span><StateChip state={state} title={profile.stateReason} /></span>
       </div>
+      <p className="page-intro">
+        Everything the app knows about you, one row each. Each section saves on its own button; a sentence at the top of the page confirms what changed. Your behavioural state is shown at the right because it decides which changes are open right now. <Link href="/help">States and terms are explained in Help.</Link>
+      </p>
       {notice && <div className={`notice ${toneCls}`} role="status" data-testid="settings-notice">{notice}</div>}
 
       {/* (a) Capital buckets */}
       <div className="section">
         <span className="label">Capital buckets</span>
+        <p className="help help--tight">Whole rupees. Only the trading bucket ever sizes a paper position; 1R below follows from it and your profile. Safety and long-term money are recorded so the firewall is explicit, and never touched.</p>
         <form action={saveBuckets} className="ledger" data-testid="buckets">
-          <BucketRow id="safety" label="Safety" help="Never touched by the app." value={Number(profile.safetyBucket)} />
-          <BucketRow id="long_term" label="Long term" help="Never touched by the app." value={Number(profile.longTermBucket)} />
+          <BucketRow id="safety" label="Safety" help="Emergency money. Never touched by the app." value={Number(profile.safetyBucket)} />
+          <BucketRow id="long_term" label="Long term" help="Investments you do not trade. Never touched by the app." value={Number(profile.longTermBucket)} />
           <BucketRow id="trading" label="Trading" help="The only bucket that sizes a paper position." value={trading} />
           <div className="row">
             <span className="label">1R</span>
@@ -55,16 +64,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {/* (b) Risk profile */}
       <div className="section">
         <span className="label">Risk profile</span>
+        <p className="help help--tight">Three fixed profiles. Each caps risk per trade, per day, per week and open at once, all in R. Tightening applies now and is journaled; loosening only opens in RESEARCH state, after the session closes. Your current profile is {PROFILES[rp].label}.</p>
         <form action={saveRiskProfile} className="ledger" data-testid="risk-profile">
           {PROFILE_ORDER.map((k) => {
             const q = PROFILES[k];
+            const current = k === rp;
             const loosens = !isTightening(rp, k);
             const blocked = loosens && !research;
+            const change = current ? "current profile" : !loosens ? "tightens; applies now" : research ? "loosens; open now, in RESEARCH" : "loosens, opens in RESEARCH";
             return (
               <label key={k} className="row" style={{ cursor: blocked ? "not-allowed" : "pointer" }}>
-                <span className="cluster"><input type="radio" name="profile" value={k} defaultChecked={rp === k} disabled={blocked} /> <span className="mono">{q.label}</span></span>
-                <span className="muted">{q.perTradePct}% per trade · {q.dailyR}R a day · {q.weeklyR}R a week · {q.concurrentR}R open at once{k === rp ? " · current" : ""}</span>
-                <span className="mono faint">{blocked ? "loosens: RESEARCH only" : loosens ? "loosens" : k === rp ? "" : "tightens"}</span>
+                <span className="cluster"><input type="radio" name="profile" value={k} defaultChecked={current} disabled={blocked} /> <span className="mono">{q.label}</span></span>
+                <span className="muted">{q.perTradePct}% per trade · {q.dailyR}R a day · {q.weeklyR}R a week · {q.concurrentR}R open at once</span>
+                <span className={`mono ${blocked ? "faint" : "muted"}`} data-testid={`profile-change-${k}`}>{change}</span>
               </label>
             );
           })}
@@ -81,6 +93,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {/* (c) Cost model */}
       <div className="section">
         <span className="label">Cost model overrides</span>
+        <p className="help help--tight">The per-trade cost assumptions that backtests and validation charge against every fill. Leave a field blank to keep the engine default; a number replaces it from the next run onward.</p>
         <form action={saveCostOverrides} className="ledger" data-testid="cost-overrides">
           {COST_KEYS.map((k) => {
             const m = COST_META[k];
@@ -105,6 +118,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {/* (d) Data source */}
       <div className="section">
         <span className="label">Data source</span>
+        <p className="help help--tight">Where the prices come from. This is set in the environment, not here; it is shown so you always know what you are looking at.</p>
         <div className="ledger" data-testid="data-source">
           <div className="row">
             <span className="label">Provider</span>
@@ -117,6 +131,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {/* (e) Simulated clock */}
       <div className="section">
         <span className="label">Simulated clock</span>
+        <p className="help help--tight">Prices are synthetic, so time is simulated too. The paper trader only moves while this clock is running; paused, nothing opens or closes. Speed is how many one-minute bars pass per real second: at 1 a session takes as long as a real one, at 60 a full trading day of 375 bars passes in about six seconds.</p>
         <div className="ledger" data-testid="sim-clock">
           {!clock ? (
             <div className="row row--wide"><span className="label">None</span><span className="muted">There is no simulated clock row yet; run the seed to create one.</span></div>
@@ -142,7 +157,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   <button className="btn btn--sm">Set speed</button>
                   <span className="muted">One-minute bars advanced per real second during session hours.</span>
                 </span>
-                <span className="fig">{clock.speed}x</span>
+                <span className="fig">{clock.speed} bars/s</span>
               </form>
             </>
           )}
@@ -152,12 +167,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {/* (f) Theme */}
       <div className="section">
         <span className="label">Theme</span>
+        <p className="help help--tight">Saved on your account, so it follows you to any browser you sign in from. System follows the device setting and changes with it; Light and Dark stay fixed.</p>
         <form action={saveTheme} className="ledger" data-testid="theme">
           <div className="row">
             <span className="label">Appearance</span>
             <span className="cluster" style={{ gap: 18 }}>
-              {(["system", "light", "dark"] as const).map((t) => (
-                <label key={t} className="cluster" style={{ gap: 6, cursor: "pointer" }}><input type="radio" name="theme" value={t} defaultChecked={profile.theme === t} /> <span className="mono">{t}</span></label>
+              {THEMES.map((t) => (
+                <label key={t.value} className="cluster" style={{ gap: 6, cursor: "pointer" }}><input type="radio" name="theme" value={t.value} defaultChecked={profile.theme === t.value} /> <span>{t.label}</span></label>
               ))}
             </span>
             <button className="btn btn--sm">Save theme</button>
@@ -165,20 +181,29 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </form>
       </div>
 
-      {/* (g) Sign out */}
+      {/* (g) Session */}
       <div className="section">
         <span className="label">Session</span>
+        <p className="help help--tight">Who is signed in and which behavioural state the account is in. The state is set by the engine, not here.</p>
         <div className="ledger">
-          <div className="row">
+          <div className="row row--wide">
             <span className="label">Signed in as</span>
             <span className="mono">{user.email}</span>
-            <form action="/api/logout" method="post"><button className="btn btn--sm">Sign out</button></form>
           </div>
           <div className="row row--wide">
             <span className="label">State</span>
             <span className="muted">{profile.stateReason} <span className="mono faint">since {simTs(profile.stateChangedAt)}</span>. Parameter edits live in the <Link href="/research">Research</Link> section and the Builder.</span>
           </div>
         </div>
+      </div>
+
+      {/* (h) Sign out, alone at the bottom */}
+      <div className="section">
+        <span className="label">Sign out</span>
+        <p className="help help--tight">Ends this session on this device only. Your buckets, strategies, jobs and journal stay on file for the next sign-in.</p>
+        <form action="/api/logout" method="post" style={{ marginTop: 12 }}>
+          <button className="btn btn--danger">Sign out</button>
+        </form>
       </div>
     </>
   );
@@ -188,7 +213,7 @@ function BucketRow({ id, label, help, value }: { id: string; label: string; help
   return (
     <div className="row">
       <label className="label" htmlFor={id}>{label}</label>
-      <span className="muted">{help}</span>
+      <span className="help">{help}</span>
       <span className="cluster" style={{ gap: 6 }}><span className="mono faint">₹</span><input id={id} name={id} className="input input--inline" inputMode="numeric" style={{ width: 140 }} defaultValue={value} required /></span>
     </div>
   );

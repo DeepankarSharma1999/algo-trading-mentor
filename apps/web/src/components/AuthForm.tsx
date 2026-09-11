@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import type { AuthState } from "@/app/actions/auth";
 
 export function AuthForm({ action, mode }: { action: (s: AuthState, f: FormData) => Promise<AuthState>; mode: "login" | "register" }) {
   const [state, formAction, pending] = useActionState(action, {});
+  const [show, setShow] = useState(false);
   return (
     <main className="content" style={{ maxWidth: 520, paddingTop: 72 }}>
       <div className="label">Algo Trading Mentor</div>
@@ -14,7 +15,16 @@ export function AuthForm({ action, mode }: { action: (s: AuthState, f: FormData)
       </p>
       <form action={formAction} className="ledger" style={{ marginTop: 28 }}>
         <div className="row row--wide"><label className="label" htmlFor="email">Email</label><input id="email" name="email" type="email" className="input" autoComplete="email" required /></div>
-        <div className="row row--wide"><label className="label" htmlFor="password">Password</label><input id="password" name="password" type="password" className="input" autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={8} required /></div>
+        <div className="row row--wide">
+          <label className="label" htmlFor="password">Password</label>
+          <div>
+            <input id="password" name="password" type={show ? "text" : "password"} className="input" autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={8} required aria-describedby={mode === "register" ? "password-help" : undefined} />
+            {mode === "register" && <p id="password-help" className="help help--tight" style={{ margin: "4px 0 0" }}>At least 8 characters.</p>}
+            <label className="cluster help" style={{ gap: 6, marginTop: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> Show what I typed
+            </label>
+          </div>
+        </div>
         {state.error && <div className="field-error" style={{ padding: "10px 0" }} role="alert">{state.error}</div>}
         <div className="cluster" style={{ paddingTop: 16 }}>
           <button className="btn btn--primary" disabled={pending}>{mode === "login" ? "Sign in" : "Create account"}</button>

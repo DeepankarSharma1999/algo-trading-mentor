@@ -12,18 +12,20 @@ export function HeaderActions({ jobId, strategyId, hasReport }: { jobId: string;
   const [review, reviewAction, reviewPending] = useActionState<ReviewState, FormData>(mentorReview, {});
   return (
     <div className="stack" style={{ textAlign: "right" }}>
-      <div className="cluster" style={{ justifyContent: "flex-end" }}>
-        <form action={rerunAction}>
+      <div className="cluster" style={{ justifyContent: "flex-end", alignItems: "flex-start" }}>
+        <form action={rerunAction} style={{ maxWidth: 220 }}>
           <input type="hidden" name="strategy_id" value={strategyId} />
-          <button className="btn btn--sm" disabled={rerunPending} title="Queues a new run of all eight stages for this strategy and opens it.">
+          <button className="btn btn--sm" disabled={rerunPending} aria-describedby="rerun-help">
             {rerunPending ? "Queueing…" : "Re-run validation"}
           </button>
+          <p id="rerun-help" className="help help--tight" style={{ margin: "4px 0 0" }}>Queues a fresh run of all eight stages for this version and opens it. This report stays in the list.</p>
         </form>
-        <form action={reviewAction}>
+        <form action={reviewAction} style={{ maxWidth: 220 }}>
           <input type="hidden" name="job_id" value={jobId} />
-          <button className="btn btn--sm" disabled={reviewPending || !hasReport} title={hasReport ? "The mentor reads the report and names the weakest stage and one next step." : "The mentor can review once the run has produced stages."}>
+          <button className="btn btn--sm" disabled={reviewPending || !hasReport} aria-describedby="review-help">
             {reviewPending ? "Asking…" : "Ask the mentor to review"}
           </button>
+          <p id="review-help" className="help help--tight" style={{ margin: "4px 0 0" }}>{hasReport ? "The mentor reads this report and names the weakest stage and one next step inside your rules. It never names an instrument." : "Available once the run has produced at least one stage."}</p>
         </form>
       </div>
       {rerun.error && <p className="notice notice--watch" role="status" style={{ textAlign: "left", margin: 0 }}>{rerun.error}</p>}

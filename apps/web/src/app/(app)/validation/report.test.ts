@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { JobStatus } from "@/lib/types";
 import { completeReport, runningReport } from "./report.fixture";
-import { STAGE_NAMES, formatMetric, headline, isActive, keyMetrics, openByDefault, stagesOf, statusWord } from "./report";
+import { STAGE_CHECKS, STAGE_COUNT, STAGE_NAMES, formatMetric, gateClass, headline, isActive, keyMetrics, openByDefault, plainStatus, stagesOf, statusWord } from "./report";
 
 const queued: JobStatus = { id: "j1", status: "queued", current_stage: 0, report: null, error: null };
 const running: JobStatus = { id: "j2", status: "running", current_stage: 2, report: runningReport, error: null };
@@ -68,6 +68,23 @@ describe("metrics", () => {
     expect(statusWord("fail").cls).toContain("status--blocked");
     expect(statusWord("skip").word).toBe("SKIP");
     expect(statusWord("pending").cls).toContain("faint");
+  });
+  it("has one plain sentence for every stage", () => {
+    for (let n = 1; n <= STAGE_COUNT; n++) expect(STAGE_CHECKS[n]).toMatch(/\.$/);
+  });
+  it("pairs every status with a square gate glyph", () => {
+    expect(gateClass("pass")).toBe("gate gate--pass");
+    expect(gateClass("fail")).toBe("gate gate--fail");
+    expect(gateClass("pending")).toBe("gate gate--pending");
+    expect(gateClass("pass", true)).toBe("gate gate--pending");
+  });
+  it("says the job state in plain words", () => {
+    expect(plainStatus(queued).text).toBe("Queued");
+    expect(plainStatus(running).text).toBe("Running stage 2 of 8");
+    expect(plainStatus(done).text).toBe("Passed");
+    expect(plainStatus(failed).text).toContain("Stopped at stage 3");
+    const notPassed: JobStatus = { ...done, report: { ...completeReport, passed: false, stages: completeReport.stages.map((s) => (s.stage === 2 ? { ...s, status: "fail" } : s)) } };
+    expect(plainStatus(notPassed).text).toBe("Failed at stage 2");
   });
   it("knows which jobs still need polling", () => {
     expect(isActive(queued)).toBe(true);

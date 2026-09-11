@@ -19,6 +19,10 @@ export default async function BuilderPage({ params, searchParams }: { params: Pr
         <h1 className="h-display">Builder</h1>
         <span className="mono muted"><Link href="/builder">all strategies</Link> · {s.id}</span>
       </div>
+      <p className="page-intro">
+        {s.name}. Work through the six numbered sections on the left; the verdict on the right says what is still missing before the
+        strategy can be validated. Save keeps your changes; Validate runs the pipeline on the saved version.
+      </p>
       <BuilderEditor
         key={s.id}
         initial={{ id: s.id, version: s.version, parentId: s.parentId, status: s.status, spec: s.spec }}

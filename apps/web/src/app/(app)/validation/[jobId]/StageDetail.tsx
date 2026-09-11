@@ -87,11 +87,11 @@ function Stage2({ d }: { d: Rec }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
         <div>
           <span className="label">In-sample equity</span>
-          {ins.pts.length > 1 ? <LineChart points={ins.pts} yLabel="equity" xLabels={ins.labels} height={180} /> : <p className="muted">The engine reports in-sample statistics only; the curve on the right is the out-of-sample run.</p>}
+          {ins.pts.length > 1 ? <LineChart points={ins.pts} yLabel="equity, ₹" xLabels={ins.labels} height={180} caption="Equity in rupees after costs, one point per trade in order, in-sample (the first 70% of the data)." /> : <p className="muted">The engine reports in-sample statistics only; the curve on the right is the out-of-sample run.</p>}
         </div>
         <div>
           <span className="label">Out-of-sample equity</span>
-          {oos.pts.length > 1 ? <LineChart points={oos.pts} yLabel="equity" xLabels={oos.labels} height={180} /> : <p className="muted">No out-of-sample equity in this payload.</p>}
+          {oos.pts.length > 1 ? <LineChart points={oos.pts} yLabel="equity, ₹" xLabels={oos.labels} height={180} caption="Equity in rupees after costs, one point per trade in order, out-of-sample (the last 30%, never seen while building)." /> : <p className="muted">No out-of-sample equity in this payload.</p>}
         </div>
       </div>
       <StatsTable cols={[{ label: "In-sample", s: stats(d.in_sample) }, { label: "Out-of-sample", s: stats(d.oos) }]} />
@@ -166,8 +166,7 @@ function Stage5({ d }: { d: Rec }) {
   }));
   return (
     <div className="stack">
-      <p className="muted" style={{ margin: 0 }}>Expectancy in R when each parameter moves by the column's percentage. Green keeps the edge, red loses it; the number is what matters.</p>
-      <Heatmap rows={rows} cols={deltas.map((x) => `${x > 0 ? "+" : ""}${x}%`)} values={values} labelW={240} />
+      <Heatmap rows={rows} cols={deltas.map((x) => `${x > 0 ? "+" : ""}${x}%`)} values={values} labelW={240} caption="Rows are numeric parameters (base value in brackets); columns move each one by that percentage; each cell is the expectancy in R at that setting. A tinted cell keeps the edge (positive) or loses it (negative); read the number, not the shade." />
     </div>
   );
 }
@@ -207,13 +206,13 @@ function Stage7({ d }: { d: Rec }) {
   const marks = [[p5, "p5"], [p50, "p50"], [p95, "p95"]].filter(([x]) => Number.isFinite(x as number)).map(([x, label]) => ({ x: x as number, label: label as string }));
   return (
     <div className="stack">
-      {hist.length ? <Histogram bins={hist} marks={marks} /> : <p className="muted">No distribution in this payload.</p>}
+      {hist.length ? <Histogram bins={hist} marks={marks} caption="Max drawdown in % of starting equity across 1000 shuffles of the trade order: left to right is drawdown size, bar height is how many shuffles landed there. Dashed lines mark p5, p50 and p95; the gate is on p95." /> : <p className="muted">No distribution in this payload.</p>}
       <div className="ledger">
         {[["p5", p5], ["p50", p50], ["p95 (gated)", p95]].map(([k, v]) => (
           <div key={String(k)} className="row row--tight"><span className="label">Max drawdown {k}</span><span className="muted">of starting equity</span><span className="fig">{pct(Number(v))}</span></div>
         ))}
       </div>
-      {Array.isArray(d.equity) && <DrawdownChart equity={(d.equity as [number, number][]).map((e) => Number(e[1]))} />}
+      {Array.isArray(d.equity) && <DrawdownChart equity={(d.equity as [number, number][]).map((e) => Number(e[1]))} caption="Drawdown from the running peak in %, one point per trade in the original order. The fill shows how far below the last high the account sat." />}
     </div>
   );
 }

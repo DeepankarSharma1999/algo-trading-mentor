@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { Fragment, useState } from "react";
 import { num, r, rupees2, simTs, ts } from "@/lib/format";
 import { LEXICON_SENTENCE, NoteForm } from "./NoteForm";
@@ -17,23 +18,48 @@ export interface JournalNote { id: string; tradeId: string | null; text: string;
 const price = (v: number | null | undefined) => (v === null || v === undefined ? "–" : num(v, 2));
 const tint = (v: number | null) => (v === null ? "status" : v > 0 ? "status status--eligible" : v < 0 ? "status status--blocked" : "status");
 
+/** Column headings with the sentence that appears on hover. Order matches the cells below. */
+const COLUMNS: { head: string; title: string; num?: boolean }[] = [
+  { head: "Closed", title: "Simulated-clock time when the paper position closed." },
+  { head: "Strategy", title: "The strategy version whose rules produced this trade." },
+  { head: "Symbol", title: "Instrument on the synthetic feed. Not a real quote." },
+  { head: "Side", title: "long or short." },
+  { head: "Qty", title: "Quantity, sized so a stop-out loses about 1R.", num: true },
+  { head: "Outcome", title: "Result in R: profit or loss divided by the rupees risked. +1.00R means you made exactly what you risked; −1.00R means the stop was hit.", num: true },
+  { head: "Process", title: "Process score: rules followed out of rules total on this trade.", num: true },
+  { head: "Plan entry", title: "Entry price the rules asked for.", num: true },
+  { head: "Fill entry", title: "Entry price the paper trade actually got.", num: true },
+  { head: "Plan stop", title: "Stop price the rules placed.", num: true },
+  { head: "Slippage", title: "Fill entry minus planned entry, in price points.", num: true },
+  { head: "Costs", title: "Brokerage, taxes, exchange fees and the slippage estimate, in rupees.", num: true },
+  { head: "MFE", title: "Maximum favourable excursion: the furthest the trade went in your favour before it closed, in R.", num: true },
+  { head: "MAE", title: "Maximum adverse excursion: the furthest the trade went against you before it closed, in R.", num: true },
+  { head: "Exit", title: "Why the trade closed: stop, target, time rule or session end." },
+  { head: "Regime", title: "Market regime on the bar the trade opened." },
+];
+
 /**
- * Closed trades as one ledger table. "Open" on a row reveals the planned-vs-actual ledger, the
+ * Closed trades as one ledger table. "Details" on a row reveals the planned-vs-actual ledger, the
  * trade's notes and a note form. Plain client state; nothing here talks to the engine directly.
  */
 export function TradeLedger({ trades, notes }: { trades: JournalTrade[]; notes: JournalNote[] }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const notesFor = (id: string) => notes.filter((n) => n.tradeId === id);
-  if (trades.length === 0) return <p className="muted">No closed paper trades yet. Trades land here once a watcher has opened and closed a paper position.</p>;
+  if (trades.length === 0) {
+    return (
+      <div className="empty" data-testid="trades-empty">
+        <p>No closed paper trades yet. Trades land here once a watcher on the Desk has opened and closed a paper position; a validated strategy set to Watch is all it takes.</p>
+        <Link className="btn" href="/desk">Open the Desk</Link>
+      </div>
+    );
+  }
   return (
     <div className="table-scroll">
       <table className="ledger-table" data-testid="trades">
         <thead>
           <tr>
-            <th>Closed</th><th>Strategy</th><th>Symbol</th><th>Side</th><th className="num">Qty</th>
-            <th className="num">Planned entry</th><th className="num">Actual entry</th><th className="num">Planned stop</th>
-            <th className="num">Slippage</th><th className="num">Costs</th><th className="num">MFE</th><th className="num">MAE</th>
-            <th>Exit</th><th>Regime</th><th className="num">Outcome</th><th className="num">Process</th><th></th>
+            {COLUMNS.map((c) => <th key={c.head} className={c.num ? "num" : undefined} title={c.title}><abbr title={c.title} style={{ textDecoration: "none" }}>{c.head}</abbr></th>)}
+            <th><span className="faint" style={{ textTransform: "none", letterSpacing: 0 }}>Details</span></th>
           </tr>
         </thead>
         <tbody>
@@ -48,6 +74,8 @@ export function TradeLedger({ trades, notes }: { trades: JournalTrade[]; notes: 
                   <td>{t.symbol}</td>
                   <td>{t.side}</td>
                   <td className="num">{t.qty}</td>
+                  <td className={`num ${tint(t.outcomeR)}`}>{r(t.outcomeR)}</td>
+                  <td className="num">{t.rulesFollowed}/{t.rulesTotal}</td>
                   <td className="num">{price(t.planned.entry)}</td>
                   <td className="num">{price(t.actual.entry)}</td>
                   <td className="num">{price(t.planned.stop)}</td>
@@ -57,20 +85,19 @@ export function TradeLedger({ trades, notes }: { trades: JournalTrade[]; notes: 
                   <td className="num">{r(t.maeR)}</td>
                   <td>{t.exitReason ?? "–"}</td>
                   <td>{t.regime}</td>
-                  <td className={`num ${tint(t.outcomeR)}`}>{r(t.outcomeR)}</td>
-                  <td className="num">{t.rulesFollowed}/{t.rulesTotal}</td>
                   <td>
-                    <button type="button" className="btn btn--sm" aria-expanded={isOpen} onClick={() => setOpen((o) => ({ ...o, [t.id]: !isOpen }))}>
-                      {isOpen ? "Close" : "Open"}
+                    <button type="button" className="btn btn--sm" aria-expanded={isOpen} aria-controls={`trade-detail-${t.id}`} onClick={() => setOpen((o) => ({ ...o, [t.id]: !isOpen }))}>
+                      {isOpen ? "Hide details" : "Details"}
                     </button>
                   </td>
                 </tr>
                 {isOpen && (
-                  <tr data-testid="trade-detail">
-                    <td colSpan={17} style={{ paddingBottom: 16 }}>
+                  <tr data-testid="trade-detail" id={`trade-detail-${t.id}`}>
+                    <td colSpan={COLUMNS.length + 1} style={{ paddingBottom: 16 }}>
                       <div className="twocol" style={{ gap: 28 }}>
                         <div>
                           <span className="label">Planned vs actual</span>
+                          <p className="help help--tight" style={{ margin: "4px 0 6px" }}>Left is what the rules asked for; right is what the paper fill got. The gap between them is your slippage and your discipline.</p>
                           <div className="ledger">
                             <Row label="Entry" planned={price(t.planned.entry)} actual={price(t.actual.entry)} />
                             <Row label="Stop" planned={price(t.planned.stop)} actual="–" />
