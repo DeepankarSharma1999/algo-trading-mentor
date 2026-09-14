@@ -114,6 +114,7 @@ def diagnose(spec: dict, stages: list, base: Any, one_r: float, lot_size: int, m
     if stats_for_edge:
         oos, ins = stats_for_edge
         g, n_, c = float(oos.get("gross_expectancy_r", 0.0)), float(oos.get("expectancy_r", 0.0)), float(oos.get("cost_per_trade_r", 0.0))
+        g, n_, c = (round(x, 2) + 0.0 for x in (g, n_, c))  # +0.0 turns -0.0 into 0.0 so text never reads "-0.00R"
         if g > 0 >= n_:
             out.append(Finding(
                 stage=2, kind="costs", title="Costs exceed the gross edge",
