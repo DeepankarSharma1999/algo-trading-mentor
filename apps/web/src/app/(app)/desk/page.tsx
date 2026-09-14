@@ -16,7 +16,9 @@ export default async function DeskPage() {
   const watchers = await db.watcher.findMany({ where: { userId: user.id }, orderBy: { updatedAt: "desc" } });
   const strategies = await db.strategy.findMany({ where: { id: { in: watchers.map((w) => w.strategyId) } }, select: { id: true, name: true, status: true } });
   const nameOf = new Map(strategies.map((s) => [s.id, s.name]));
-  const latest = await Promise.all(watchers.map((w) => db.signal.findFirst({ where: { watcherId: w.id }, orderBy: { ts: "desc" } })));
+  const simNow = (await db.simClock.findFirst())?.now;
+  // Signals dated after the simulated now come from a replayed loop of the feed; never show them as latest.
+  const latest = await Promise.all(watchers.map((w) => db.signal.findFirst({ where: { watcherId: w.id, ...(simNow ? { ts: { lte: simNow } } : {}) }, orderBy: { ts: "desc" } })));
   const traces = watchers
     .map((w, i) => ({ watcher: w, row: latest[i], signal: latest[i]?.payload as Signal | undefined }))
     .filter((t): t is { watcher: (typeof watchers)[number]; row: NonNullable<(typeof latest)[number]>; signal: Signal } => !!t.row && !!t.signal);

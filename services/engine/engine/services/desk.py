@@ -13,9 +13,10 @@ SESSION_LABEL = "09:15–15:30 IST"
 
 def watcher_dict(session: Session, w: m.Watcher, strategy: m.Strategy | None = None) -> dict:
     strategy = strategy or session.get(m.Strategy, w.strategy_id)
+    now = clock.now(session)
     latest = (
         session.query(m.Signal)
-        .filter(m.Signal.watcher_id == w.id)
+        .filter(m.Signal.watcher_id == w.id, m.Signal.ts <= now)
         .order_by(m.Signal.ts.desc(), m.Signal.id.desc())
         .first()
     )

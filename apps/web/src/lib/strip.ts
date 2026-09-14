@@ -8,11 +8,13 @@ export interface StripData {
   dailyUsedR: number; dailyLimitR: number; weeklyUsedR: number; weeklyLimitR: number;
   brakes: { daily: boolean; weekly: boolean };
   state: BehaviourState; stateReason: string;
-  marketOpen: boolean; simNow: Date | null;
+  marketOpen: boolean; simNow: Date | null; clockRunning: boolean; atDataEnd: boolean;
   provider: string;
 }
 
 export const IST_SESSION = { start: "09:15", end: "15:30" };
+/** Last close in the synthetic feed; the clock stops here instead of looping. */
+export const DATA_END = new Date("2025-12-31T15:30:00Z");
 
 export function isMarketOpen(simNow: Date | null): boolean {
   if (!simNow) return false;
@@ -35,7 +37,8 @@ export async function stripData(userId: string): Promise<StripData> {
   const simNow = clockRow?.now ?? null;
   const dayStart = simNow ? startOfDay(simNow) : new Date(0);
   const weekStart = simNow ? startOfWeek(simNow) : new Date(0);
-  const closed = await db.paperTrade.findMany({ where: { userId, status: "closed", closedAt: { gte: weekStart } }, select: { outcomeR: true, closedAt: true } });
+  // Trades dated after the simulated now belong to a replayed loop of the feed, not to this week.
+  const closed = await db.paperTrade.findMany({ where: { userId, status: "closed", closedAt: { gte: weekStart, ...(simNow ? { lte: simNow } : {}) } }, select: { outcomeR: true, closedAt: true } });
   const loss = (rows: typeof closed) => rows.reduce((a, t) => a + Math.max(0, -(t.outcomeR ?? 0)), 0);
   const dailyUsed = loss(closed.filter((t) => t.closedAt && t.closedAt >= dayStart));
   const weeklyUsed = loss(closed);
@@ -45,7 +48,7 @@ export async function stripData(userId: string): Promise<StripData> {
     dailyUsedR: dailyUsed, dailyLimitR: p.dailyR, weeklyUsedR: weeklyUsed, weeklyLimitR: p.weeklyR,
     brakes: { daily: dailyUsed >= p.dailyR, weekly: weeklyUsed >= p.weeklyR },
     state: (profile?.behaviourState ?? "RESEARCH") as BehaviourState, stateReason: profile?.stateReason ?? "",
-    marketOpen: isMarketOpen(simNow), simNow,
+    marketOpen: isMarketOpen(simNow), simNow, clockRunning: clockRow?.running ?? false, atDataEnd: !!simNow && simNow >= DATA_END,
     provider: process.env.DATA_PROVIDER ?? "synthetic",
   };
 }

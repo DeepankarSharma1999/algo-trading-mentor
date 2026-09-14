@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from engine.db import models as m
+from engine.services import clock
 from engine.services.common import iso
 
 
@@ -33,9 +34,10 @@ def trade_dict(t: m.PaperTrade) -> dict:
 
 
 def trades(session: Session, user_id: str) -> list[dict]:
+    now = clock.now(session)
     rows = (
         session.query(m.PaperTrade)
-        .filter(m.PaperTrade.user_id == user_id)
+        .filter(m.PaperTrade.user_id == user_id, m.PaperTrade.opened_at <= now)
         .order_by(m.PaperTrade.opened_at.desc())
         .all()
     )

@@ -65,6 +65,8 @@ def risk_status(trading_bucket: float, profile: str, trades: list[TradeRow], now
     p = PROFILES[profile]
     today = now.date()
     wk = _week_start(today)
+    # Anything closed after `now` is from a replayed loop of the feed, not this session's history.
+    trades = [t for t in trades if t.status != "closed" or t.closed_at is None or t.closed_at <= now]
     daily = sum(max(0.0, -(t.outcome_r or 0.0)) for t in trades if t.status == "closed" and t.closed_at and t.closed_at.date() == today)
     weekly = sum(max(0.0, -(t.outcome_r or 0.0)) for t in trades if t.status == "closed" and t.closed_at and t.closed_at.date() >= wk)
     concurrent = sum(t.planned_risk_r for t in trades if t.status == "open")

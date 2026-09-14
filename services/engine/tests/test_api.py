@@ -254,9 +254,9 @@ def test_mentor_explain_and_coach(api):
 
 def test_sim_clock_get_and_post(api):
     c = api.get("/sim/clock").json()
-    assert c == {"now": "2025-06-12T10:35:00", "speed": 2, "running": True, "market_open": True}
+    assert c == {"now": "2025-06-12T10:35:00", "speed": 2, "running": True, "market_open": True, "at_end": False, "data_end": "2025-12-31"}
     c2 = api.post("/sim/clock", json={"speed": 5, "running": False, "jump_to": "2025-06-13T15:29:00"}, headers=H).json()
-    assert c2 == {"now": "2025-06-13T15:29:00", "speed": 5, "running": False, "market_open": True}
+    assert c2 == {"now": "2025-06-13T15:29:00", "speed": 5, "running": False, "market_open": True, "at_end": False, "data_end": "2025-12-31"}
     assert api.get("/health").json()["sim_now"] == "2025-06-13T15:29:00"
 
 
@@ -268,10 +268,12 @@ def test_paper_step_advances_through_session_bars_only(api):
     assert r["sim_now"] == "2025-06-13T15:30:00" and r["market_open"] is False
     r = api.post("/paper/step", json={"bars": 1}, headers=H).json()
     assert r["sim_now"] == "2025-06-16T09:15:00" and r["market_open"] is True  # skips the weekend
-    api.post("/sim/clock", json={"jump_to": "2025-12-31T15:30:00"}, headers=H)
-    assert api.post("/paper/step", json={"bars": 1}, headers=H).json()["sim_now"] == "2025-01-01T09:15:00"  # wraps
     with db.session() as s:
-        p = s.get(m.Profile, harness.USER_ID)
-        assert p.behaviour_state == "CALM"  # a session opened last, so the state is CALM again
         kinds = [(e.from_state, e.to_state) for e in s.query(m.StateEvent).order_by(m.StateEvent.ts).all()]
         assert ("CALM", "RESEARCH") in kinds and ("RESEARCH", "CALM") in kinds
+        assert s.get(m.Profile, harness.USER_ID).behaviour_state == "CALM"  # a session opened last
+    # End of the synthetic feed: the clock stops at the last close instead of looping.
+    api.post("/sim/clock", json={"jump_to": "2025-12-31T15:29:00", "running": True}, headers=H)
+    r = api.post("/paper/step", json={"bars": 3}, headers=H).json()
+    assert r["sim_now"] == "2025-12-31T15:30:00"
+    assert api.get("/sim/clock").json()["running"] is False

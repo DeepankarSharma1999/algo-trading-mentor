@@ -15,8 +15,10 @@ const s = (v: unknown): string | null => (typeof v === "string" && v ? (/(Z|[+-]
 /** Summary first (totals, by regime, streaks), then the ledger of closed paper trades, then the free notes. Reads Postgres only. */
 export default async function JournalPage() {
   const user = await requireUser();
+  // Trades closed after the simulated now belong to a replayed loop of the feed and are not shown.
+  const simNow = (await db.simClock.findFirst())?.now;
   const [rows, noteRows] = await Promise.all([
-    db.paperTrade.findMany({ where: { userId: user.id, status: "closed" }, orderBy: { closedAt: "desc" } }),
+    db.paperTrade.findMany({ where: { userId: user.id, status: "closed", ...(simNow ? { closedAt: { lte: simNow } } : {}) }, orderBy: { closedAt: "desc" } }),
     db.journalNote.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" } }),
   ]);
   const trades: JournalTrade[] = rows.map((t) => {

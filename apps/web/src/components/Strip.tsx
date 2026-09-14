@@ -21,7 +21,7 @@ export function Strip({ d }: { d: StripData }) {
       <div className="strip__cell" title={d.stateReason}><span className="label">State</span><StateChip state={d.state} title={d.stateReason} /></div>
       <div className="strip__cell" style={{ marginLeft: "auto" }} title="Simulated clock over synthetic prices. Pause or speed it up in Settings.">
         <span className="label">Market</span>
-        <span className="fig">{d.marketOpen ? "OPEN" : "CLOSED"}</span>
+        <span className="fig">{d.marketOpen ? "OPEN" : "CLOSED"}{!d.clockRunning && <span className="status status--watch" style={{ marginLeft: 6 }}>{d.atDataEnd ? "end of data" : "paused"}</span>}</span>
         <span className="fig faint">{d.simNow ? `sim ${simTs(d.simNow)}` : "no clock"}</span>
       </div>
     </header>

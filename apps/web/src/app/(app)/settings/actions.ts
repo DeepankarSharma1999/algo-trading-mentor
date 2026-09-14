@@ -89,8 +89,13 @@ export async function saveCostOverrides(form: FormData): Promise<void> {
 export async function setSimClock(form: FormData): Promise<void> {
   await requireUser();
   const op = String(form.get("op") ?? "");
-  const data: { running?: boolean; speed?: number } = {};
-  if (op === "pause") data.running = false;
+  const data: { running?: boolean; speed?: number; jump_to?: string } = {};
+  if (op === "jump") {
+    const day = String(form.get("jump_day") ?? "");
+    if (!/^2025-\d\d-\d\d$/.test(day)) back("Pick a date inside the synthetic feed (2025-01-01 to 2025-12-31). Nothing was changed.", "blocked");
+    data.jump_to = `${day}T09:15:00`;
+    data.running = true;
+  } else if (op === "pause") data.running = false;
   else if (op === "resume") data.running = true;
   else if (op === "speed") {
     const s = Number(form.get("speed"));
@@ -99,10 +104,10 @@ export async function setSimClock(form: FormData): Promise<void> {
   } else back("Unknown clock control.", "blocked");
   const row = await db.simClock.findFirst();
   if (!row) back("There is no simulated clock row yet; run the seed first.", "blocked");
-  await db.simClock.update({ where: { id: row.id }, data });
+  await db.simClock.update({ where: { id: row.id }, data: { running: data.running, speed: data.speed, ...(data.jump_to ? { now: new Date(`${data.jump_to}Z`) } : {}) } });
   let tail = "";
   try { await engine("/sim/clock", { body: data }); } catch { tail = ` ${ENGINE_DOWN}`; }
-  back(op === "pause" ? `Clock paused.${tail}` : op === "resume" ? `Clock running.${tail}` : `Clock speed is ${data.speed} bars per second.${tail}`);
+  back(op === "jump" ? `Clock moved to ${data.jump_to?.slice(0, 10)} 09:15 and running. The paper trader replays from there; trades it made after that date stay in the journal but are hidden until the clock passes them again.${tail}` : op === "pause" ? `Clock paused.${tail}` : op === "resume" ? `Clock running.${tail}` : `Clock speed is ${data.speed} bars per second.${tail}`);
 }
 
 /** (f) Theme, kept on the profile so it follows the account; the ThemeSetter applies it in the browser. */

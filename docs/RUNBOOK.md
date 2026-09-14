@@ -47,7 +47,11 @@ advances it `PAPER_SPEED` one-minute bars per real second during session hours (
 synthetic trading days) and jumps to the next session open at close. Market open/closed and the
 RESEARCH state derive from this clock. Control it from Settings (pause, resume, speed) or
 `POST /sim/clock {"running": false, "speed": 10, "jump_to": "2025-06-13T09:15:00"}`. Data runs
-2024-01-01 → 2025-12-31; the clock wraps to 2025-01-01 when it runs off the end.
+2024-01-01 → 2025-12-31; when the clock reaches the last close it **stops** (the strip shows "end of
+data"). Settings → Simulated clock → "Jump to" restarts it from any 2025 date. It does not loop on
+its own: a replayed year paper-trades the same bars again, and trades dated later in the current
+sim week would spend the daily and weekly brakes. Anything dated after the simulated now is hidden
+from the Desk, the Journal and the brakes for the same reason.
 
 ## Swap the data provider
 

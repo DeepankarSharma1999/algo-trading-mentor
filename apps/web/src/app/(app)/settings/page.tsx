@@ -147,6 +147,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 </span>
                 <span className={`status ${clock.running ? "status--eligible" : "status--watch"}`}>{clock.running ? "running" : "paused"}</span>
               </div>
+              {!clock.running && clock.now >= new Date("2025-12-31T15:30:00Z") && (
+                <div className="notice notice--watch" role="status">The synthetic feed ends at 2025-12-31 15:30 and the clock stopped there rather than looping. Jump it to an earlier date below to keep paper trading.</div>
+              )}
+              <form action={setSimClock} className="row">
+                <label className="label" htmlFor="jump_day">Jump to</label>
+                <span className="cluster">
+                  <input type="hidden" name="op" value="jump" />
+                  <input id="jump_day" name="jump_day" type="date" className="input input--inline" min="2025-01-01" max="2025-12-31" defaultValue="2025-06-12" />
+                  <button className="btn btn--sm">Jump and run</button>
+                  <span className="muted">Moves the clock to 09:15 on that synthetic day and starts it. Replaying a period paper-trades it again.</span>
+                </span>
+                <span className="fig">{simTs(clock.now).slice(0, 10)}</span>
+              </form>
               <form action={setSimClock} className="row">
                 <label className="label" htmlFor="speed">Speed</label>
                 <span className="cluster">

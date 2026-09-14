@@ -2,7 +2,9 @@
 
 `advance` only ever lands on session moments: 09:15 .. 15:30 on a trading day. 15:30 is the moment
 the last bar closes (the market is closed at that instant); the next step jumps to the following
-trading day's 09:15. Past the end of the synthetic data the clock wraps to 2025-01-01 09:15.
+trading day's 09:15. Past the end of the synthetic data the clock stops (running=False) at the last
+close instead of looping: a replayed year would paper-trade the same bars again and put trades dated
+"later this week" into the risk windows. Jump it back from Settings to replay deliberately.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from engine.data.calendar import DATA_END, SESSION_CLOSE, SESSION_OPEN, is_marke
 from engine.db import models as m
 
 DEFAULT_START = datetime(2025, 6, 12, 10, 35)
-WRAP_TO = datetime(2025, 1, 1, 9, 15)
+DATA_START = datetime(2025, 1, 1, 9, 15)
 
 
 def _next_trading_day(d: date) -> date:
@@ -42,15 +44,20 @@ def session_close(d: date) -> datetime:
     return datetime.combine(d, SESSION_CLOSE)
 
 
-def next_open_after(ts: datetime) -> datetime:
+def next_open_after(ts: datetime) -> datetime | None:
+    """None when the synthetic data has run out."""
     nxt = _next_trading_day(ts.date())
     if nxt > DATA_END:
-        return WRAP_TO
+        return None
     return session_open(nxt)
 
 
-def step_one(ts: datetime) -> datetime:
-    """The next session moment strictly after `ts`."""
+def at_end(ts: datetime) -> bool:
+    return next_open_after(ts) is None and ts >= session_close(ts.date())
+
+
+def step_one(ts: datetime) -> datetime | None:
+    """The next session moment strictly after `ts`, or None at the end of the data."""
     ts = ts.replace(second=0, microsecond=0)
     if is_trading_day(ts.date()):
         if ts < session_open(ts.date()):
@@ -83,6 +90,8 @@ def to_dict(row: m.SimClock) -> dict[str, Any]:
         "speed": int(row.speed),
         "running": bool(row.running),
         "market_open": market_open(row.now),
+        "at_end": at_end(row.now),
+        "data_end": DATA_END.isoformat(),
     }
 
 
@@ -105,7 +114,11 @@ def advance(session: Session, minutes: int = 1) -> datetime:
     row = get(session)
     ts = row.now
     for _ in range(max(0, int(minutes))):
-        ts = step_one(ts)
+        nxt = step_one(ts)
+        if nxt is None:  # end of synthetic data: stop rather than loop
+            row.running = False
+            break
+        ts = nxt
     row.now = ts
     session.flush()
     return ts

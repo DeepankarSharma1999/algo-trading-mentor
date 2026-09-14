@@ -78,6 +78,12 @@ Decisions made autonomously while building phase 1. Newest at the bottom of each
   ledger identity is unchanged. A Help page with a glossary and a "start here" checklist on an empty
   Desk replace the assumption that users know what 1R, brakes and gates mean.
 
+- **The simulated clock stops at the end of the feed instead of looping.** The first version wrapped
+  to 2025-01-01, which after a few loops left the Desk showing a December trace as "latest" and the
+  brakes counting losses from "later this week" of a previous loop. Now `advance()` pauses at the last
+  close, Settings offers a deliberate "Jump to", and every read of signals, trades and risk windows
+  ignores rows dated after the simulated now.
+
 ## Stubs
 
 - `VendorProvider` (`engine/data/provider.py`): interface documented, raises `NotImplementedError`.
