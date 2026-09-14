@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from engine import indicators as ind
 from engine.backtest import (
     BacktestResult,
+    ConditionStat,
     auto_segment,
     build_equity,
     compute_stats,
@@ -107,6 +108,28 @@ def check(spec_dict: dict) -> dict:
     return {"testable": not missing, "missing": missing, "ambiguity_flags": flags}
 
 
+def in_sample_window(prov: Any, symbols: list[str], oos_fraction: float | None = None) -> dict:
+    """The pipeline's chronological split over the full feed: the first (1 - oos_fraction) of the data is the
+    in-sample window; everything from `oos_from` on is the out-of-sample window stage 2 reads and stays locked."""
+    from engine.validation.gates import AcceptanceGates
+
+    frac = AcceptanceGates().oos_fraction if oos_fraction is None else oos_fraction
+    t0s, t1s = [], []
+    for sym in symbols:
+        d = prov.get_bars(sym, "1D")
+        t0s.append(pd.Timestamp(d["ts"].iloc[0]).normalize())
+        t1s.append(pd.Timestamp(d["ts"].iloc[-1]).normalize() + pd.Timedelta(days=1))
+    t0, t1 = min(t0s), max(t1s)
+    split = (t0 + (t1 - t0) * (1 - frac)).normalize()
+    pct = int(round((1 - frac) * 100))
+    return {
+        "kind": "in_sample", "start": t0.isoformat(), "end": split.isoformat(), "oos_from": split.isoformat(),
+        "in_sample_pct": pct,
+        "note": (f"First {pct}% of the data ({t0.date()} to {(split - pd.Timedelta(days=1)).date()}). The last {100 - pct}% "
+                 "stays locked until you Validate, so a quick test cannot be tuned to the test window."),
+    }
+
+
 def backtest(
     spec_dict: dict,
     start: Any = None,
@@ -114,6 +137,7 @@ def backtest(
     cost_multiplier: float = 1.0,
     one_r: float = 2000.0,
     cost_params: CostParams = CostParams(),
+    window: str | None = None,
 ) -> dict:
     try:
         spec = as_strategy(spec_dict)
@@ -126,6 +150,15 @@ def backtest(
     prov = market.provider()
     results: list[BacktestResult] = []
     tf = str(spec.timeframe)
+    win: dict | None = None
+    if window == "in_sample":
+        try:
+            win = in_sample_window(prov, [i.root for i in spec.instruments])
+        except Exception as e:
+            raise ApiError(404, f"No data for the strategy's instruments: {e}") from e
+        start, end = win["start"], win["end"]
+    elif window not in (None, "", "default"):
+        raise ApiError(400, "window must be 'in_sample' or omitted.")
     for inst in spec.instruments:
         sym = inst.root
         try:
@@ -134,7 +167,7 @@ def backtest(
             raise ApiError(404, f"No data for {sym}: {e}") from e
         s = pd.Timestamp(start) if start else s0
         e = pd.Timestamp(end) if end else e0
-        if e == e.normalize():
+        if e == e.normalize() and win is None:  # a date-only end covers that day; the in-sample split is exclusive
             e = e + pd.Timedelta(days=1)
         warm = s - pd.Timedelta(days=45 if tf != "1D" else 400)
         bars = prov.get_bars(sym, tf, warm, e)
@@ -164,4 +197,14 @@ def backtest(
     )
     for k in ("skipped_for_size", "skipped_invalid_stop", "skipped_for_rr", "skipped_day_limit", "cancelled_orders"):
         setattr(merged.stats, k, sum(getattr(r.stats, k) for r in results))
-    return merged.model_dump(mode="json")
+    # Condition hit rates and setup counts, merged across instruments the same way the pipeline does.
+    total_bars = sum(int(r.setup_bars.get("bars", 0)) for r in results) or 1
+    for name in {k for r in results for k in r.condition_stats}:
+        parts = [r.condition_stats[name] for r in results if name in r.condition_stats]
+        true_bars = sum(c.true_bars for c in parts)
+        merged.condition_stats[name] = ConditionStat(true_bars=true_bars, true_pct=100.0 * true_bars / total_bars, side=parts[0].side)
+    merged.setup_bars = {k: sum(int(r.setup_bars.get(k, 0)) for r in results) for k in ("long", "short", "bars")}
+    out = merged.model_dump(mode="json")
+    if win is not None:
+        out["window"] = win
+    return out

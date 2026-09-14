@@ -76,7 +76,7 @@ All bodies/replies JSON. Errors: `{ "error": "<plain sentence>" }` with 4xx.
 |---|---|
 | `GET /health` | `{ ok, provider, sim_now }` |
 | `POST /strategies/check` | `{ spec }` → `{ testable, missing: [string], ambiguity_flags }` (shared validator + engine-side consistency checks) |
-| `POST /backtest` | `{ spec, start?, end?, cost_multiplier? }` → `BacktestResult` (synchronous; used by builder preview) |
+| `POST /backtest` | `{ spec, start?, end?, cost_multiplier?, window? }` → `BacktestResult` (synchronous). `window: "in_sample"` runs on the first 70% of the feed only and adds `window: { kind, start, end, oos_from, in_sample_pct, note }`; the OOS window stays locked for the Builder's quick test |
 | `POST /validate` | `{ strategy_id }` → `{ job_id }` (creates `validation_jobs` row, runs in a background thread) |
 | `GET /jobs/{job_id}` | → `{ id, status, current_stage, report, error }` |
 | `GET /desk/{user_id}` | → `DeskSummary` (top strip + watchers + latest signals) |

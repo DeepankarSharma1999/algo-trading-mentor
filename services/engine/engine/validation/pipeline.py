@@ -60,6 +60,8 @@ class ValidationReport(BaseModel):
     weakest_sentence: str = ""
     passed: bool = False
     diagnosis: list[Finding] = Field(default_factory=list)  # ARCHITECTURE section 4b; empty when passed
+    attempt: int = 1  # finished validation runs of any version of this slug, this one included
+    attempt_notice: str = ""  # non-empty from the third attempt: repeated runs on the same window weaken a pass
 
 
 @dataclass

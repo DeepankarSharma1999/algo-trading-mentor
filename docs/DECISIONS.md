@@ -93,6 +93,13 @@ Decisions made autonomously while building phase 1. Newest at the bottom of each
 - **Gemini is the default LLM provider** (the user's choice, and it has a free tier). One function
   (`mentor.service._ask`) knows about providers; the guardrail and fallbacks are provider-agnostic.
 
+- **Quick test is in-sample only, and every report counts attempts.** The Builder's "Quick test" runs the
+  synchronous backtester on the first 70% of the feed (the same chronological split stage 2 uses) and never
+  on the last 30%, so fast iteration cannot tune to the test window. Each finished validation of any version
+  of a slug increments `attempt` on the report; from the third attempt the report carries a plain notice
+  that repeated runs on one window weaken a pass. Warn-only for phase 1; a fresh-holdout rule after N
+  attempts is the obvious phase-2 step and is recorded here rather than built.
+
 ## Stubs
 
 - `VendorProvider` (`engine/data/provider.py`): interface documented, raises `NotImplementedError`.

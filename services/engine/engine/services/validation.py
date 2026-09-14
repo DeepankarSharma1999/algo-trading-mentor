@@ -151,6 +151,8 @@ def _run_job(job_id: str) -> None:
             segment=auto_segment(spec),
         )
         with db.session() as s:
+            attempt = attempt_number(s, user_id, strategy_id, job_id)
+            report.attempt, report.attempt_notice = attempt, attempt_notice(attempt, strategy_id)
             j = s.get(m.ValidationJob, job_id)
             if j is not None:
                 j.status = "done"
@@ -169,6 +171,32 @@ def _run_job(job_id: str) -> None:
     finally:
         with _lock:
             _inflight.discard(job_id)
+
+
+ATTEMPT_NOTICE_FROM = 3
+
+
+def attempt_number(s: Any, user_id: str, strategy_id: str, job_id: str) -> int:
+    """1 + finished validation runs of any version sharing this strategy's slug (the same test window)."""
+    strat = s.get(m.Strategy, strategy_id)
+    if strat is None:
+        return 1
+    ids = [r.id for r in s.query(m.Strategy.id).filter(m.Strategy.user_id == user_id, m.Strategy.slug == strat.slug).all()]
+    prior = (
+        s.query(m.ValidationJob.id)
+        .filter(m.ValidationJob.strategy_id.in_(ids), m.ValidationJob.status.in_(("done", "failed")), m.ValidationJob.id != job_id)
+        .count()
+    )
+    return int(prior) + 1
+
+
+def attempt_notice(attempt: int, strategy_id: str) -> str:
+    if attempt < ATTEMPT_NOTICE_FROM:
+        return ""
+    slug = strategy_id.rsplit("_v", 1)[0]
+    return (f"Attempt {attempt} on the same test window for {slug}. Every retry weakens what a pass means: rules that "
+            "pass on the fifth try were chosen because of this window, not despite it. Simplify rather than tune, "
+            "and treat a late pass as a hypothesis for paper trading, not a result.")
 
 
 def default_range(prov: Any, symbol: str, months: int = 6) -> tuple[pd.Timestamp, pd.Timestamp]:

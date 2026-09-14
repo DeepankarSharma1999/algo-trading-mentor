@@ -28,6 +28,7 @@ class BacktestBody(BaseModel):
     start: str | None = None
     end: str | None = None
     cost_multiplier: float = Field(default=1.0, ge=0.0, le=10.0)
+    window: str | None = None  # "in_sample": first 70% of the feed only; the OOS window stays locked
 
 
 class ValidateBody(BaseModel):
@@ -46,7 +47,8 @@ def backtest(body: BacktestBody, uid: str = Depends(user_id), s: Session = Depen
     if p is not None and p.risk_profile in PROFILES and num(p.trading_bucket) > 0:
         one_r = risk_one_r(num(p.trading_bucket), p.risk_profile)
     return strategies_svc.backtest(
-        body.spec, body.start, body.end, body.cost_multiplier, one_r=one_r, cost_params=validation_svc.cost_params_for(p)
+        body.spec, body.start, body.end, body.cost_multiplier, one_r=one_r, cost_params=validation_svc.cost_params_for(p),
+        window=body.window,
     )
 
 

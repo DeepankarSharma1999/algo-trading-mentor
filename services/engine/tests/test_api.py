@@ -79,6 +79,42 @@ def test_backtest_is_synchronous_and_returns_result_shape(api):
     assert r2.status_code == 400 and "stop" in r2.json()["error"]
 
 
+def test_backtest_in_sample_window_never_touches_the_oos_window(api):
+    spec = ema_cross_spec(instruments=["RELIANCE"], market="NSE_EQ")
+    r = api.post("/backtest", json={"spec": spec, "window": "in_sample"}, headers=H)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    win = body["window"]
+    assert win["kind"] == "in_sample" and win["end"] == win["oos_from"] and win["in_sample_pct"] == 70
+    assert "locked" in win["note"]
+    assert all(t["entry_ts"] < win["oos_from"] for t in body["trades"]), "a trade entered inside the locked window"
+    assert set(body) >= {"condition_stats", "setup_bars", "stats"} and body["setup_bars"]["bars"] > 0
+    assert api.post("/backtest", json={"spec": spec, "window": "bogus"}, headers=H).status_code == 400
+
+
+def _run_validation(api, strategy_id):
+    job_id = api.post("/validate", json={"strategy_id": strategy_id}, headers=H).json()["job_id"]
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        j = api.get(f"/jobs/{job_id}").json()
+        if j["status"] in ("done", "failed"):
+            return j
+        time.sleep(0.2)
+    raise AssertionError("job did not finish")
+
+
+def test_repeated_validations_count_attempts_and_warn_from_the_third(api):
+    first = _run_validation(api, harness.STRATEGY_ID)["report"]
+    n0 = first["attempt"]
+    second = _run_validation(api, harness.STRATEGY_ID)["report"]
+    third = _run_validation(api, harness.STRATEGY_ID)["report"]
+    assert (second["attempt"], third["attempt"]) == (n0 + 1, n0 + 2)
+    assert third["attempt"] >= 3 and third["attempt_notice"].startswith(f"Attempt {third['attempt']} on the same test window")
+    assert guardrail(third["attempt_notice"], {"RELIANCE"}).ok
+    if n0 == 1:
+        assert first["attempt_notice"] == "" and second["attempt_notice"] == ""
+
+
 # --- risk ------------------------------------------------------------------------------------------
 
 
@@ -200,7 +236,9 @@ def test_validate_job_runs_in_background_and_reports_stages(api):
     assert set(j) >= {"id", "status", "current_stage", "report", "error"}
     assert j["status"] == "done", j["error"]
     rep = j["report"]
-    assert set(rep) == {"strategy_id", "started_at", "finished_at", "stages", "weakest_stage", "weakest_sentence", "passed", "diagnosis"}
+    assert set(rep) == {"strategy_id", "started_at", "finished_at", "stages", "weakest_stage", "weakest_sentence", "passed", "diagnosis",
+                        "attempt", "attempt_notice"}
+    assert rep["attempt"] >= 1 and isinstance(rep["attempt_notice"], str)
     assert [s["stage"] for s in rep["stages"]] == list(range(1, 9))
     assert [s["name"] for s in rep["stages"]] == [STAGE_NAMES[i] for i in range(1, 9)]
     assert all(set(s) == {"stage", "name", "status", "summary", "metrics", "detail"} for s in rep["stages"])
