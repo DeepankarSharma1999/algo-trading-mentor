@@ -101,7 +101,7 @@ cd services/engine && python -m ruff check . && python -m pytest -q
 pnpm --filter web exec playwright install chromium && pnpm --filter web e2e
 ```
 
-Test counts: engine 247 (pytest), schema 18 and web 63 (vitest), Playwright 2.
+Test counts: engine 249 (pytest), schema 18 and web 70 (vitest), Playwright 2.
 CI (`.github/workflows/ci.yml`) runs the same, plus the compose stack and Playwright.
 
 ## Paper trader

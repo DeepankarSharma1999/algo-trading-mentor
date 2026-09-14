@@ -65,6 +65,10 @@ export interface ValidationReport {
   stages: StageResult[]; weakest_stage: number | null; weakest_sentence: string; passed: boolean;
   /** §4b: empty when passed; absent on reports written before the fix-it flow. */
   diagnosis?: Finding[];
+  /** 1-based count of finished validation runs of any version of this strategy slug, this one included. Absent on older reports. */
+  attempt?: number;
+  /** Empty until `attempt` reaches 3; then one plain sentence from the engine. */
+  attempt_notice?: string;
 }
 export interface JobStatus { id: string; status: "queued" | "running" | "done" | "failed"; current_stage: number; report: ValidationReport | null; error: string | null }
 export interface PaperTrade {
@@ -82,3 +86,11 @@ export interface JournalAggregates {
 }
 /** `gross_expectancy_r` is before brokerage, taxes and fees; `cost_per_trade_r` = gross − net. Both absent on older payloads. */
 export interface Stats { trades: number; wins: number; losses: number; win_rate: number; expectancy_r: number; gross_expectancy_r: number; cost_per_trade_r: number; avg_win_r: number; avg_loss_r: number; profit_factor: number; net_pnl: number; max_drawdown_pct: number; max_drawdown_r: number; largest_trade_share: number; [k: string]: number }
+
+/** The data window a `POST /backtest { window: "in_sample" }` run covered. Dates are ISO; `in_sample_pct` is 0..100. */
+export interface BacktestWindow { kind: "in_sample"; start: string; end: string; oos_from: string; in_sample_pct: number; note: string }
+/** Reply of `POST /backtest`. `window` is absent when the engine ran on all of the data; the stage-1 extras are absent on older engines. */
+export interface BacktestResult {
+  trades: unknown[]; equity: [string, number][]; stats: Stats; by_regime: Record<string, Stats>; start_equity: number;
+  condition_stats?: Record<string, ConditionStat>; setup_bars?: SetupBars; window?: BacktestWindow;
+}

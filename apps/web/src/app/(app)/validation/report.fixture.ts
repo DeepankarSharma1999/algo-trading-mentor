@@ -45,6 +45,8 @@ export const completeReport: ValidationReport = {
   weakest_stage: 2,
   weakest_sentence: "Out-of-sample is the weakest stage: expectancy fell to +0.12R after costs over 38 trades, against +0.24R in-sample, so it is validated but keep an eye there.",
   diagnosis: [],
+  attempt: 1,
+  attempt_notice: "",
   stages: [
     { stage: 1, name: "In-sample coherence", status: "pass", summary: "142 trades (min 60), inputs clean after 34 warm-up bars, stops and targets on the right side, expectancy +0.21R", metrics: { trades: 142, min_trades: 60, expectancy_r: 0.21, nan_after_warmup: 0, warmup_bars: 34, stop_side_errors: 0, target_side_errors: 0, margin: 1.37 }, detail: { stats: base, warmup_bars: 34, problems: [] } },
     { stage: 2, name: "Out-of-sample", status: "pass", summary: "OOS (last 30%, from 2025-03-03): 38 trades, expectancy +0.12R after costs vs in-sample +0.24R", metrics: { in_sample_expectancy_r: 0.24, oos_expectancy_r: 0.12, oos_trades: 38, oos_fraction: 0.3, margin: 0.12 }, detail: { in_sample: ins, oos, equity: equity(60, 200000, 900) } },
@@ -93,6 +95,8 @@ export const failedReport: ValidationReport = {
   passed: false,
   weakest_stage: 2,
   weakest_sentence: "Out-of-sample failed: expectancy is −0.07R after costs over 21 trades, against −0.03R in-sample; the rules did not carry an edge into data they had never seen.",
+  attempt: 4,
+  attempt_notice: "This is the fourth finished run of nifty_squeeze across its versions; every edit after a failed run fits the same data a little more, so a pass from here proves less than a first-time pass would.",
   stages: [
     { stage: 1, name: "In-sample coherence", status: "pass", summary: "71 trades (min 60), inputs clean after 34 warm-up bars, stops and targets on the right side, expectancy −0.04R", metrics: { trades: 71, min_trades: 60, expectancy_r: -0.04, nan_after_warmup: 0, warmup_bars: 34, stop_side_errors: 0, target_side_errors: 0, margin: 0.18 }, detail: {
       stats: s1, warmup_bars: 34, problems: [],

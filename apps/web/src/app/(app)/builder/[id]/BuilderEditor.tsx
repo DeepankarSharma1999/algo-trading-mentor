@@ -5,7 +5,9 @@ import { AUTOMATION_PERMISSIONS, INDICATORS, OPS, REGIMES, TIMEFRAMES, checkTest
 import { PlainChip } from "@/components/Chip";
 import { StrategyRules } from "@/components/StrategyRules";
 import { watchBlockedReason } from "@/lib/strategies.pure";
-import { formaliseAction, requestValidation, saveSpecAction, watchForm } from "../actions";
+import type { BacktestResult } from "@/lib/types";
+import { formaliseAction, quickTest, requestValidation, saveSpecAction, watchForm } from "../actions";
+import { QuickTest } from "./QuickTest";
 import {
   INPUT_NAME_RE, INSTRUMENT_RE, MARKETS, OPERAND_HELP, OPS_HELP, PARAM_KEYS, PERMISSION_HELP, RISK_HELP, STOP_HELP, STOP_PARAM_KEYS, STOP_TYPES,
   TARGET_HELP, TARGET_TYPES, TIME_RE, TRAILING_HELP, TRAILING_PARAM_KEYS, TRAILING_TYPES, TRIGGER_HELP, TRIGGER_TYPES, indicatorHelp, operandsFor, type Indicator,
@@ -49,10 +51,14 @@ export function BuilderEditor({ initial, notice, section }: Props) {
   const [formText, setFormText] = useState("");
   const [formalised, setFormalised] = useState<{ prose?: string; flags?: string[] } | null>(null);
   const [resolutions, setResolutions] = useState<Record<string, string>>({});
+  // Quick test: per-run client state. `specKey` is the spec the result came from, so a later edit reads as stale.
+  const [quick, setQuick] = useState<{ result: BacktestResult | null; error: string | null; specKey: string | null }>({ result: null, error: null, specKey: null });
+  const [testing, startTest] = useTransition();
 
   const verdict = useMemo(() => checkTestable(spec), [spec]);
   const operands = useMemo(() => operandsFor(spec.inputs), [spec.inputs]);
   const dirty = useMemo(() => JSON.stringify(spec) !== saved, [spec, saved]);
+  const quickStale = useMemo(() => quick.specKey !== null && JSON.stringify(spec) !== quick.specKey, [spec, quick.specKey]);
   const patch = (p: Partial<Strategy>) => setSpec((s) => ({ ...s, ...p }));
 
   // Deep link from a validation finding: /builder/<id>?section=entry. Unknown keys do nothing.
@@ -72,6 +78,7 @@ export function BuilderEditor({ initial, notice, section }: Props) {
   ];
   const validateReason = !verdict.testable ? "Validate needs a testable strategy; the verdict on the right lists what is missing." : dirty ? "Save first; validation runs on the saved version." : status === "draft" ? "Save first." : null;
   const watchReason = watchBlockedReason(status, spec.automation_permission);
+  const quickReason = !verdict.testable ? "Quick test needs a testable strategy." : null;
   const showWatch = status === "validated";
 
   const save = () => start(async () => {
@@ -85,6 +92,13 @@ export function BuilderEditor({ initial, notice, section }: Props) {
     const r = await requestValidation(initial.id);
     if (r.jobId) { router.push(`/validation/${r.jobId}`); return; }
     setNote({ kind: "watch", text: r.error ?? "Validation could not start." });
+  });
+  const runQuickTest = () => startTest(async () => {
+    if (formErrors.length) { setQuick((q) => ({ ...q, error: formErrors.join(" ") })); return; }
+    const key = JSON.stringify(spec);
+    const r = await quickTest(spec);
+    if ("error" in r) { setQuick((q) => ({ ...q, error: r.error })); return; }
+    setQuick({ result: r, error: null, specKey: key });
   });
   const formalise = () => start(async () => {
     const r = await formaliseAction(formText);
@@ -117,6 +131,8 @@ export function BuilderEditor({ initial, notice, section }: Props) {
         <PlainChip>{status}</PlainChip>
         <button type="button" className="btn btn--primary" disabled={pending} onClick={save}>Save</button>
         <button type="button" className="btn" disabled={pending || !!validateReason} onClick={validate}>Validate</button>
+        <button type="button" className="btn" disabled={testing || !!quickReason} onClick={runQuickTest} data-testid="quick-test-button">{testing ? "Testing…" : "Quick test"}</button>
+        <span className="help" style={{ maxWidth: "26ch" }} data-testid="quick-test-help">{quickReason ?? "Runs on what you see, saved or not."}</span>
         {showWatch && (
           <form action={watchForm}>
             <input type="hidden" name="strategy_id" value={initial.id} /><input type="hidden" name="back" value={`/builder/${initial.id}`} />
@@ -341,6 +357,8 @@ export function BuilderEditor({ initial, notice, section }: Props) {
               {verdict.testable && <p className="muted" style={{ margin: "8px 0 0" }}>Every required piece is present. {dirty ? "Save, then Validate." : status === "validated" ? "This version has been validated." : "Validate when ready."}</p>}
             </div>
           </div>
+
+          <QuickTest result={quick.result} error={quick.error} stale={quickStale} pending={testing} />
 
           <div className="section">
             <span className="label">Version</span>

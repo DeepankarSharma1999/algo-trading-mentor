@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { JobStatus } from "@/lib/types";
 import { sectionForPath } from "@/lib/patch";
 import { completeReport, failedReport, passedReport, runningReport, templateSuggestions } from "./report.fixture";
-import { STAGE_CHECKS, STAGE_COUNT, STAGE_NAMES, asSection, costBreakdown, findingLabel, findingsOf, firstLeverSection, formatFindingNumber, formatMetric, gateClass, headline, isActive, keyMetrics, openByDefault, plainStatus, stagesOf, statusWord } from "./report";
+import { STAGE_CHECKS, STAGE_COUNT, STAGE_NAMES, asSection, attemptLabel, attemptNotice, costBreakdown, findingLabel, findingsOf, firstLeverSection, formatFindingNumber, formatMetric, gateClass, headline, isActive, keyMetrics, openByDefault, plainStatus, stagesOf, statusWord } from "./report";
 
 const queued: JobStatus = { id: "j1", status: "queued", current_stage: 0, report: null, error: null };
 const running: JobStatus = { id: "j2", status: "running", current_stage: 2, report: runningReport, error: null };
@@ -92,6 +92,29 @@ describe("metrics", () => {
     expect(isActive(running)).toBe(true);
     expect(isActive(done)).toBe(false);
     expect(isActive(failed)).toBe(false);
+  });
+});
+
+describe("attempt count", () => {
+  it("labels the attempt from the report and stays silent on older reports", () => {
+    expect(attemptLabel(failedReport)).toBe("Attempt 4");
+    expect(attemptLabel(completeReport)).toBe("Attempt 1");
+    expect(attemptLabel({ ...completeReport, attempt: undefined })).toBeNull();
+    expect(attemptLabel({ attempt: 0 })).toBeNull();
+    expect(attemptLabel({ attempt: 2.5 })).toBeNull();
+    expect(attemptLabel(null)).toBeNull();
+  });
+  it("shows the engine's notice only when it is a non-empty sentence", () => {
+    expect(attemptNotice(failedReport)).toMatch(/fourth finished run/);
+    expect(attemptNotice(completeReport)).toBeNull();
+    expect(attemptNotice({ attempt_notice: "   " })).toBeNull();
+    expect(attemptNotice({})).toBeNull();
+    expect(attemptNotice(null)).toBeNull();
+  });
+  it("keeps the fixtures coherent: the notice appears from the third attempt on", () => {
+    expect(failedReport.attempt).toBeGreaterThanOrEqual(3);
+    expect(completeReport.attempt).toBeLessThan(3);
+    expect(completeReport.attempt_notice).toBe("");
   });
 });
 

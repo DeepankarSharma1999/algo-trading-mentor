@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { JobStatus, ValidationReport } from "@/lib/types";
-import { findingsOf } from "../report";
+import { attemptLabel, findingsOf } from "../report";
 import { Checklist } from "./Checklist";
 import { FixIt } from "./FixIt";
 import { HeaderActions } from "./HeaderActions";
@@ -29,7 +29,10 @@ export default async function ValidationJobPage({ params, searchParams }: { para
   return (
     <>
       <div className="page-head">
-        <h1 className="h-display">Validation · <span className="mono" style={{ fontSize: "0.8em" }}>{row.strategyId}</span></h1>
+        <h1 className="h-display">
+          Validation · <span className="mono" style={{ fontSize: "0.8em" }}>{row.strategyId}</span>
+          {attemptLabel(job.report) && <span className="mono muted" style={{ fontSize: "0.6em", marginLeft: 12 }} data-testid="attempt">{attemptLabel(job.report)}</span>}
+        </h1>
         <HeaderActions jobId={row.id} strategyId={row.strategyId} hasReport={!!row.report} />
       </div>
       {error && <div className="notice notice--blocked" role="alert" data-testid="fixit-error">{error}</div>}

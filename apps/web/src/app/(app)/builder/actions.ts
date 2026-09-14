@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { checkTestable, type Strategy } from "@atm/schema";
 import { requireUser } from "@/lib/auth";
-import { engine } from "@/lib/engine";
+import { EngineError, engine } from "@/lib/engine";
+import type { BacktestResult } from "@/lib/types";
 import { createDraft, getStrategy, saveSpec } from "@/lib/strategies";
 import { validateBlockedReason, watchBlockedReason } from "@/lib/strategies.pure";
 
@@ -83,5 +84,23 @@ export async function formaliseAction(text: string): Promise<{ draft?: Strategy;
     return await engine<{ draft: Strategy; ambiguity_flags: string[]; prose: string }>("/mentor/formalise", { body: { text: t }, userId: user.id });
   } catch {
     return { error: "Mentor unavailable. The engine is not reachable; your text is still in the box." };
+  }
+}
+
+const QUICK_TEST_DOWN = "The engine is not reachable right now, so the quick test did not run. Your edits are untouched; try again when the engine is up.";
+
+/**
+ * Quick test: an in-sample backtest of the spec as it is in the editor, saved or not. The engine keeps the last 30%
+ * of the data locked for Validate. Never throws to the client: a 4xx sentence or the engine-down sentence comes back as `{ error }`.
+ */
+export async function quickTest(spec: Strategy): Promise<BacktestResult | { error: string }> {
+  const user = await requireUser();
+  const check = checkTestable(spec);
+  if (!check.testable) return { error: `Not testable yet: ${check.missing.join(" ")}` };
+  try {
+    return await engine<BacktestResult>("/backtest", { body: { spec, window: "in_sample" }, userId: user.id });
+  } catch (e) {
+    if (e instanceof EngineError && e.status < 500 && e.message) return { error: e.message };
+    return { error: QUICK_TEST_DOWN };
   }
 }

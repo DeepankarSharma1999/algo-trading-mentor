@@ -113,6 +113,18 @@ export function formatMetric(key: string, v: number): string {
   return v.toFixed(2);
 }
 
+/** "Attempt N" for the page head: the engine's 1-based count of finished runs of any version of this slug. Null on older reports. */
+export function attemptLabel(report: Pick<ValidationReport, "attempt"> | null | undefined): string | null {
+  const n = report?.attempt;
+  return typeof n === "number" && Number.isInteger(n) && n >= 1 ? `Attempt ${n}` : null;
+}
+
+/** The engine's one-sentence warning once a strategy has been re-run enough times to fit the data. Null when empty or absent. */
+export function attemptNotice(report: Pick<ValidationReport, "attempt_notice"> | null | undefined): string | null {
+  const t = typeof report?.attempt_notice === "string" ? report.attempt_notice.trim() : "";
+  return t || null;
+}
+
 // ---- §4b fix-it flow -------------------------------------------------------------------------------------
 
 /** The finding kind in words, for the `.label` of a "What you can change" row. */

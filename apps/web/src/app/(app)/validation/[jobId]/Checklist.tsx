@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { JobStatus } from "@/lib/types";
-import { STAGE_CHECKS, STAGE_COUNT, gateClass, headline, isActive, keyMetrics, openByDefault, stagesOf, statusWord } from "../report";
+import { STAGE_CHECKS, STAGE_COUNT, attemptNotice, gateClass, headline, isActive, keyMetrics, openByDefault, stagesOf, statusWord } from "../report";
 import { StageDetail } from "./StageDetail";
 
 const POLL_MS = 1500;
@@ -42,6 +42,7 @@ export function Checklist({ initial }: { initial: JobStatus }) {
   const head = headline(job);
   const defaults = openByDefault(job);
   const isOpen = (n: number) => toggled[n] ?? defaults.has(n);
+  const notice = attemptNotice(job.report);
 
   return (
     <>
@@ -55,6 +56,7 @@ export function Checklist({ initial }: { initial: JobStatus }) {
           </p>
         </>
       )}
+      {notice && <p className="notice notice--watch" role="status" data-testid="attempt-notice">{notice}</p>}
       {isActive(job) && (
         <p className="help" style={{ margin: 0 }} role="status">
           {source === "db" ? "The engine is not answering; showing the last stage it wrote to the database. " : ""}
