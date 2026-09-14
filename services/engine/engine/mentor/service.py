@@ -46,7 +46,9 @@ def llm_available() -> bool:
     return llm_provider() is not None
 
 
-def _ask(user_content: str, max_tokens: int = 1200) -> str | None:
+def _ask(user_content: str, max_tokens: int = 1200, json_mode: bool = False) -> str | None:
+    """`json_mode` asks the model for a bare JSON object. Gemini 2.5 spends "thinking" tokens from the same
+    output budget, so thinking is switched off and the budget raised; otherwise a 1200-token cap truncates the JSON."""
     provider = llm_provider()
     if provider is None:
         return None
@@ -56,11 +58,13 @@ def _ask(user_content: str, max_tokens: int = 1200) -> str | None:
             from google.genai import types as gtypes
 
             client = genai.Client(api_key=config.GEMINI_API_KEY)
-            resp = client.models.generate_content(
-                model=config.GEMINI_MODEL,
-                contents=user_content,
-                config=gtypes.GenerateContentConfig(system_instruction=SYSTEM, max_output_tokens=max_tokens),
+            gcfg = gtypes.GenerateContentConfig(
+                system_instruction=SYSTEM,
+                max_output_tokens=max(max_tokens, 4000) if json_mode else max_tokens,
+                thinking_config=gtypes.ThinkingConfig(thinking_budget=0),
+                response_mime_type="application/json" if json_mode else None,
             )
+            resp = client.models.generate_content(model=config.GEMINI_MODEL, contents=user_content, config=gcfg)
             return resp.text or ""
         import anthropic
 
@@ -88,7 +92,7 @@ def _guarded(endpoint: str, text: str | None, allowed: set[str], fallback: str) 
 def formalise(text: str, allowed_symbols: set[str] | None = None) -> dict[str, Any]:
     symbols = sorted({s for s in allowed_symbols or set() if s.upper() in text.upper()})
     base = templates.formalise(text, symbols)
-    raw = _ask(f"formalise\n\nHypothesis:\n{text}\n\nSymbols the user named: {symbols or 'none'}\n\nSchema example:\n{json.dumps(base['draft'])}")
+    raw = _ask(f"formalise\n\nHypothesis:\n{text}\n\nSymbols the user named: {symbols or 'none'}\n\nSchema example:\n{json.dumps(base['draft'])}", 3000, json_mode=True)
     if raw is None:
         return base
     try:
@@ -183,7 +187,8 @@ def suggest(spec: dict, report: dict, allowed_symbols: set[str] | None = None) -
         + "\n\nAllowed patch roots: " + ", ".join(sorted(ALLOWED_ROOTS)) + ". Forbidden: " + ", ".join(sorted(FORBIDDEN_ROOTS))
         + '.\nReply with JSON only: {"prose": str, "verdict": "fixable"|"no_edge", "suggestions": [{"title": str, "reason": str, '
         + '"kind": "fix"|"tune"|"simplify"|"stop", "patch": [{"path": "/json/pointer", "from": current, "to": new}]}]} with at most 5 suggestions.',
-        1600,
+        4000,
+        json_mode=True,
     )
     if raw is None:
         return base
