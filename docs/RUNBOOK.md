@@ -85,6 +85,12 @@ section. "Ask the mentor for changes" turns the same numbers into concrete edits
 version and opens it in the Builder; "Edit and re-test" does the same without a patch. When the rules
 lose before costs out of sample the mentor says "no edge" and offers simplification, not tuning.
 
+Two guards keep fast iteration honest. The Builder's **Quick test** runs the backtester in seconds on
+what you see (saved or not) but only on the first 70% of the feed; the last 30% is the out-of-sample
+window stage 2 reads and it stays locked, so a quick test cannot be tuned to the test. Every finished
+validation of any version of a strategy counts as an **attempt** on the report ("Attempt 4"); from the
+third attempt the report carries a notice that repeated runs on one window weaken what a pass means.
+
 ## Checks
 
 ```bash
