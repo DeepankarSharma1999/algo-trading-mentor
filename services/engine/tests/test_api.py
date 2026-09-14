@@ -200,7 +200,7 @@ def test_validate_job_runs_in_background_and_reports_stages(api):
     assert set(j) >= {"id", "status", "current_stage", "report", "error"}
     assert j["status"] == "done", j["error"]
     rep = j["report"]
-    assert set(rep) == {"strategy_id", "started_at", "finished_at", "stages", "weakest_stage", "weakest_sentence", "passed"}
+    assert set(rep) == {"strategy_id", "started_at", "finished_at", "stages", "weakest_stage", "weakest_sentence", "passed", "diagnosis"}
     assert [s["stage"] for s in rep["stages"]] == list(range(1, 9))
     assert [s["name"] for s in rep["stages"]] == [STAGE_NAMES[i] for i in range(1, 9)]
     assert all(set(s) == {"stage", "name", "status", "summary", "metrics", "detail"} for s in rep["stages"])
@@ -277,3 +277,20 @@ def test_paper_step_advances_through_session_bars_only(api):
     r = api.post("/paper/step", json={"bars": 3}, headers=H).json()
     assert r["sim_now"] == "2025-12-31T15:30:00"
     assert api.get("/sim/clock").json()["running"] is False
+
+
+def test_mentor_suggest_after_validation(api):
+    job_id = api.post("/validate", json={"strategy_id": harness.STRATEGY_ID}, headers=H).json()["job_id"]
+    for _ in range(600):
+        j = api.get(f"/jobs/{job_id}").json()
+        if j["status"] in ("done", "failed"):
+            break
+        time.sleep(0.1)
+    r = api.post("/mentor/suggest", json={"job_id": job_id}, headers=H)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["source"] == "template" and out["verdict"] in ("fixable", "no_edge", "passed")
+    assert isinstance(out["suggestions"], list) and out["prose"]
+    for sg in out["suggestions"]:
+        assert set(sg) >= {"id", "title", "reason", "kind", "patch"}
+    assert api.post("/mentor/suggest", json={"job_id": "nope"}, headers=H).status_code == 404

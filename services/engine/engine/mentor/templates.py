@@ -247,3 +247,128 @@ def coach(text: str, hits: list[str], trade: dict | None = None) -> str:
         parts.append("The note reads as process, not emotion. Keep writing the plan before the fill and the deviation, if any, after.")
     parts.append("The mentor does not comment on P&L as skill; it comments on whether your rules were followed.")
     return " ".join(parts)
+
+
+# ---------------------------------------------------------------- suggest (deterministic, from report.diagnosis)
+
+TF_ORDER = ["1m", "3m", "5m", "15m", "30m", "1h", "1D"]
+
+
+def _get(spec: dict, pointer: str) -> Any:
+    cur: Any = spec
+    for seg in pointer.split("/")[1:]:
+        if isinstance(cur, list):
+            cur = cur[int(seg)] if seg.isdigit() and int(seg) < len(cur) else None
+        elif isinstance(cur, dict):
+            cur = cur.get(seg)
+        else:
+            return None
+        if cur is None:
+            return None
+    return cur
+
+
+def _slower_tf(tf: str) -> str | None:
+    if tf in TF_ORDER and TF_ORDER.index(tf) < len(TF_ORDER) - 1:
+        return TF_ORDER[TF_ORDER.index(tf) + 1]
+    return None
+
+
+def suggest(spec: dict, report: dict) -> dict:
+    """One concrete edit per finding where a safe one exists. Never invents instruments; never touches gates."""
+    findings = report.get("diagnosis") or []
+    out: list[dict] = []
+    seen: set[str] = set()
+
+    def add(sid: str, title: str, reason: str, kind: str, patch: list[dict]) -> None:
+        if sid in seen:
+            return
+        seen.add(sid)
+        out.append({"id": sid, "title": title, "reason": reason, "kind": kind, "patch": patch})
+
+    for f in findings:
+        kind, levers = f.get("kind"), f.get("levers") or []
+        nums = f.get("numbers") or {}
+        if kind == "bottleneck_condition" and levers and levers[0].get("path"):
+            path = levers[0]["path"]
+            cond = _get(spec, path) or {}
+            rhs, op = cond.get("rhs"), cond.get("op")
+            if isinstance(rhs, (int, float)) and op in (">", ">=", "<", "<="):
+                new = round(rhs * (0.75 if op in (">", ">=") else 1.25), 4)
+                add("bottleneck", f"Relax the bottleneck threshold to {new:g}",
+                    f"'{cond.get('lhs')} {op} {rhs:g}' held on {nums.get('true_pct', 0):.1f}% of bars. At {new:g} it fires more often; check that the extra setups still make money in sample before trusting them.",
+                    "tune", [{"path": f"{path}/rhs", "from": rhs, "to": new}])
+            else:
+                key = path.split("/")[1]
+                lst = list(spec.get(key) or [])
+                idx = int(path.split("/")[2])
+                if len(lst) > 1 and idx < len(lst):
+                    trimmed = [c for i, c in enumerate(lst) if i != idx]
+                    add("simplify", "Drop the condition that almost never holds",
+                        "Fewer conditions is a simpler rule and more trades; if the results barely change, the condition was not adding anything.",
+                        "simplify", [{"path": f"/{key}", "from": lst, "to": trimmed}])
+        elif kind == "sized_to_zero":
+            stop = spec.get("stop") or {}
+            if stop.get("type") == "atr":
+                mult = float((stop.get("params") or {}).get("mult", 2.0))
+                add("size", f"Tighten the ATR stop from {mult:g}x to {round(mult * 0.75, 2):g}x",
+                    f"{int(nums.get('skipped_for_size', 0))} setups risked more than 1R per lot; a nearer stop lowers the rupee risk per unit so a whole lot fits.",
+                    "fix", [{"path": "/stop/params/mult", "from": mult, "to": round(mult * 0.75, 2)}])
+            elif stop.get("type") == "fixed_pct":
+                pct = float((stop.get("params") or {}).get("pct", 1.0))
+                add("size", f"Tighten the fixed stop from {pct:g}% to {round(pct * 0.75, 3):g}%",
+                    "A nearer stop lowers the rupee risk per unit so a whole lot fits inside 1R.",
+                    "fix", [{"path": "/stop/params/pct", "from": pct, "to": round(pct * 0.75, 3)}])
+            else:
+                add("size", "Switch to a 1.5x ATR stop",
+                    "The current stop type puts one lot's risk above 1R on most setups; an ATR stop scales with the bar size and can be tuned.",
+                    "fix", [{"path": "/stop", "from": stop, "to": {"type": "atr", "params": {"length": 14, "mult": 1.5}}}])
+        elif kind == "rr_filter":
+            tg = spec.get("targets") or []
+            if tg and tg[0].get("type") == "rr":
+                v = float(tg[0].get("value", 2))
+                add("rr", f"Move the target from {v:g}R to {v + 0.5:g}R",
+                    "Costs are fixed per trade, so a further target raises the post-cost reward-to-risk; fewer setups will reach it.",
+                    "tune", [{"path": "/targets/0/value", "from": v, "to": v + 0.5}])
+        elif kind == "day_limit":
+            n = int(spec.get("risk", {}).get("max_trades_per_day", 1))
+            add("daylimit", f"Allow {n + 1} trades a day instead of {n}",
+                "Setups arrived after the daily limit; one more trade a day adds sample size without changing the rules.",
+                "tune", [{"path": "/risk/max_trades_per_day", "from": n, "to": n + 1}])
+        elif kind == "costs":
+            tf = spec.get("timeframe")
+            nxt = _slower_tf(str(tf))
+            if nxt:
+                add("costs_tf", f"Move from {tf} to {nxt} bars",
+                    f"You made {nums.get('gross_expectancy_r', 0):+.2f}R before costs and lost after; slower bars mean fewer trades and larger moves per unit of cost.",
+                    "tune", [{"path": "/timeframe", "from": tf, "to": nxt}])
+            tg = spec.get("targets") or []
+            if tg and tg[0].get("type") == "rr":
+                v = float(tg[0].get("value", 2))
+                add("costs_target", f"Move the target from {v:g}R to {v + 0.5:g}R",
+                    "A further target keeps more of each trade after fixed costs.",
+                    "tune", [{"path": "/targets/0/value", "from": v, "to": v + 0.5}])
+        elif kind == "no_edge":
+            lst = list(spec.get("entry_long") or [])
+            if len(lst) > 1:
+                add("simplify_noedge", "Simplify: remove one entry condition",
+                    "The rules lose before costs out of sample. Tuning a threshold to make that window pass would be fitting. Removing a condition tests whether the idea survives in a simpler form; if it does not, the hypothesis is the problem.",
+                    "simplify", [{"path": "/entry_long", "from": lst, "to": lst[:-1]}])
+            add("stop_noedge", "Consider a different hypothesis",
+                "Expectancy is negative before costs out of sample. No parameter change should be expected to fix that.",
+                "stop", [])
+        elif kind == "drawdown":
+            pct = float(spec.get("risk", {}).get("max_equity_risk_pct", 0.5))
+            add("dd", f"Cut equity risk per trade from {pct:g}% to {round(pct * 0.75, 3):g}%",
+                "The 5th-percentile drawdown breaches your profile; smaller positions shrink it in proportion without touching the entry rule.",
+                "fix", [{"path": "/risk/max_equity_risk_pct", "from": pct, "to": round(pct * 0.75, 3)}])
+    verdict = "passed" if report.get("passed") else ("no_edge" if any(f.get("kind") == "no_edge" for f in findings) else "fixable")
+    if verdict == "passed":
+        prose = "This version passed every hard gate. There is nothing to fix; watch it in paper mode and let the journal speak."
+    elif verdict == "no_edge":
+        prose = ("The rules lose out of sample even before costs. The suggestions below simplify rather than tune, because "
+                 "making the test window pass by moving a threshold is fitting the past, not fixing the idea.")
+    else:
+        prose = (f"{len(out)} concrete change{'s' if len(out) != 1 else ''} to your own rules, each tied to a failed check. "
+                 "Apply one at a time and re-test; every apply makes a new version so you can compare.")
+    return {"prose": prose, "verdict": verdict, "suggestions": out, "source": "template"}

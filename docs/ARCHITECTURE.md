@@ -146,6 +146,48 @@ Stage `detail` payloads: 2 `{ in_sample: stats, oos: stats, equity }`, 3 `{ wind
 4 `{ multipliers: { "1.0": stats, "1.5": stats, "2.0": stats } }`, 5 `{ params: [{name, base, grid: [{delta, expectancy}]}] }`,
 6 `{ regimes: { [regime]: stats } }`, 7 `{ dd_p5, dd_p50, dd_p95, histogram: [[bin, count]] }`, 8 `{ paper: stats|null, backtest: stats, agreement }`.
 
+## 4b. Fix-it flow: diagnosis and suggestions
+
+A failed validation must never be a dead end. Two additions, both anchored in the user's own rules:
+
+**Diagnosis (engine, deterministic).** `BacktestResult` gains `condition_stats` (per rendered entry
+condition: `{side, true_pct, true_bars}`) and `setup_bars` (`{long, short, bars}`); `Stats` gains
+`gross_expectancy_r` and `cost_per_trade_r`. `ValidationReport` gains `diagnosis: Finding[]`
+(empty when passed), built after the stages run:
+
+```ts
+type Section = "identity" | "timeframe" | "inputs" | "entry" | "exits" | "risk";   // Builder fold ids: sec-<section>
+interface Lever { label: string; section: Section; path?: string }                  // path = JSON pointer into the spec
+interface Finding {
+  stage: number;
+  kind: "bottleneck_condition" | "sized_to_zero" | "rr_filter" | "day_limit" | "costs" | "no_edge" | "regime" | "sensitivity" | "drawdown" | "other";
+  title: string;      // one line, e.g. "One condition is the bottleneck"
+  detail: string;     // plain sentence with the numbers
+  numbers: Record<string, number>;
+  levers: Lever[];    // what in the user's own rules drives this finding
+}
+```
+
+The web renders `diagnosis` as "What you can change": each finding with its levers as buttons that
+open `/builder/<id>?section=<section>`; plus "Edit and re-test", which always creates the next
+version (`saveSpec(..., { newVersion: true })`) so the report stays attached to the version it tested.
+
+**Suggestions (engine, LLM or template).** `POST /mentor/suggest { job_id }` →
+
+```ts
+interface Suggestion { id: string; title: string; reason: string; kind: "fix" | "tune" | "simplify" | "stop"; patch: { path: string; from: unknown; to: unknown }[] }
+{ prose: string; verdict: "fixable" | "no_edge" | "passed"; suggestions: Suggestion[]; source: "gemini" | "anthropic" | "template" }
+```
+
+Patches are JSON-pointer edits to the spec. The engine rejects any patch touching `/instruments`,
+`/market`, `/automation_permission`, `/strategy_id`, `/version`, `/parent_id`, `/name`, `/version_locked`,
+or `/ambiguity_flags`; allowed roots are `/inputs`, `/entry_long`, `/entry_short`, `/timeframe`,
+`/session`, `/regime_affinity`, `/trigger`, `/stop`, `/targets`, `/trailing`, `/time_exit`, `/risk`.
+Prose and reasons pass the guardrail. Nothing is ever applied by the engine: the web's "Apply" action
+applies the patch and saves it as a new version. Provider selection: `GEMINI_API_KEY` → Gemini
+(`GEMINI_MODEL`, default `gemini-2.5-flash`), else `ANTHROPIC_API_KEY` → Claude, else the template
+suggestions derived from `diagnosis`.
+
 ## 5. Jobs
 
 Validation runs inside the engine process in a thread (`ThreadPoolExecutor(max_workers=2)`), writing

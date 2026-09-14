@@ -1,5 +1,6 @@
-"""Mentor service: Anthropic Messages API when a key is configured, deterministic templates otherwise.
-Every output passes `guardrail()`; a rejected LLM reply falls back to the template and is logged."""
+"""Mentor service: Gemini when GEMINI_API_KEY is set, else Claude when ANTHROPIC_API_KEY is set, else
+deterministic templates. Every output passes `guardrail()`; a rejected LLM reply falls back to the
+template and is logged."""
 
 from __future__ import annotations
 
@@ -32,14 +33,35 @@ def _log_rejection(endpoint: str, reasons: list[str], raw: str) -> None:
         _sink(endpoint, "; ".join(reasons), raw)
 
 
+def llm_provider() -> str | None:
+    """'gemini' | 'anthropic' | None, by which key is configured (Gemini wins when both are set)."""
+    if config.GEMINI_API_KEY:
+        return "gemini"
+    if config.ANTHROPIC_API_KEY:
+        return "anthropic"
+    return None
+
+
 def llm_available() -> bool:
-    return bool(config.ANTHROPIC_API_KEY)
+    return llm_provider() is not None
 
 
 def _ask(user_content: str, max_tokens: int = 1200) -> str | None:
-    if not llm_available():
+    provider = llm_provider()
+    if provider is None:
         return None
     try:
+        if provider == "gemini":
+            from google import genai
+            from google.genai import types as gtypes
+
+            client = genai.Client(api_key=config.GEMINI_API_KEY)
+            resp = client.models.generate_content(
+                model=config.GEMINI_MODEL,
+                contents=user_content,
+                config=gtypes.GenerateContentConfig(system_instruction=SYSTEM, max_output_tokens=max_tokens),
+            )
+            return resp.text or ""
         import anthropic
 
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
@@ -49,7 +71,7 @@ def _ask(user_content: str, max_tokens: int = 1200) -> str | None:
         )
         return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     except Exception as e:  # network, auth, quota: fall back silently, the app must keep working
-        log.warning("LLM call failed: %s", e)
+        log.warning("LLM call failed (%s): %s", provider, e)
         return None
 
 
@@ -103,3 +125,80 @@ def coach(text: str, hits: list[str], trade: dict | None, allowed_symbols: set[s
     fallback = templates.coach(text, hits, trade)
     raw = _ask(f"coach\n\nJournal note:\n{text}\n\nLexicon hits: {hits}\n\nTrade: {json.dumps(trade) if trade else 'none'}", 500)
     return _guarded("coach", raw, allowed_symbols, fallback)
+
+
+# ---------------------------------------------------------------- suggest (ARCHITECTURE section 4b)
+
+ALLOWED_ROOTS = {"inputs", "entry_long", "entry_short", "timeframe", "session", "regime_affinity", "trigger", "stop",
+                 "targets", "trailing", "time_exit", "risk"}
+FORBIDDEN_ROOTS = {"instruments", "market", "automation_permission", "strategy_id", "version", "parent_id", "name",
+                   "version_locked", "ambiguity_flags"}
+KINDS = {"fix", "tune", "simplify", "stop"}
+VERDICTS = {"fixable", "no_edge", "passed"}
+
+
+def patch_ok(patch: Any) -> bool:
+    """Every op is a JSON-pointer set whose root is an allowed spec section. Forbidden roots reject the whole patch."""
+    if not isinstance(patch, list):
+        return False
+    for op in patch:
+        if not isinstance(op, dict) or not isinstance(op.get("path"), str) or not op["path"].startswith("/") or "to" not in op:
+            return False
+        root = op["path"].split("/")[1] if len(op["path"]) > 1 else ""
+        if root in FORBIDDEN_ROOTS or root not in ALLOWED_ROOTS:
+            return False
+    return True
+
+
+def _clean_suggestions(raw: Any) -> list[dict]:
+    out: list[dict] = []
+    for i, sg in enumerate(raw if isinstance(raw, list) else []):
+        if not isinstance(sg, dict) or not patch_ok(sg.get("patch", [])):
+            continue
+        title, reason = str(sg.get("title", "")).strip(), str(sg.get("reason", "")).strip()
+        if not title or not reason:
+            continue
+        out.append({
+            "id": str(sg.get("id") or f"s{i + 1}"), "title": title[:120], "reason": reason[:600],
+            "kind": sg.get("kind") if sg.get("kind") in KINDS else "tune", "patch": sg["patch"],
+        })
+    return out[:6]
+
+
+def suggest(spec: dict, report: dict, allowed_symbols: set[str] | None = None) -> dict[str, Any]:
+    """Concrete edits to the user's own rules for a failed report. Never applied here; the web saves a new version."""
+    allowed = set(allowed_symbols or [])
+    base = templates.suggest(spec, report)
+    provider = llm_provider()
+    if provider is None:
+        return base
+    slim = {
+        "weakest_sentence": report.get("weakest_sentence"),
+        "passed": report.get("passed"),
+        "stages": [{k: v for k, v in s.items() if k != "detail"} for s in report.get("stages", [])],
+        "diagnosis": report.get("diagnosis", []),
+    }
+    raw = _ask(
+        "suggest\n\nStrategy spec JSON:\n" + json.dumps(spec) + "\n\nValidation report (stage details trimmed):\n" + json.dumps(slim)
+        + "\n\nAllowed patch roots: " + ", ".join(sorted(ALLOWED_ROOTS)) + ". Forbidden: " + ", ".join(sorted(FORBIDDEN_ROOTS))
+        + '.\nReply with JSON only: {"prose": str, "verdict": "fixable"|"no_edge", "suggestions": [{"title": str, "reason": str, '
+        + '"kind": "fix"|"tune"|"simplify"|"stop", "patch": [{"path": "/json/pointer", "from": current, "to": new}]}]} with at most 5 suggestions.',
+        1600,
+    )
+    if raw is None:
+        return base
+    try:
+        js = json.loads(raw[raw.index("{") : raw.rindex("}") + 1])
+    except Exception as e:
+        _log_rejection("suggest", [f"unparseable reply: {e}"], raw)
+        return base
+    suggestions = _clean_suggestions(js.get("suggestions"))
+    prose = str(js.get("prose", "")).strip()
+    check = guardrail(" ".join([prose] + [s["title"] + " " + s["reason"] for s in suggestions]), allowed)
+    if not check.ok:
+        _log_rejection("suggest", check.reasons, raw)
+        return base
+    verdict = js.get("verdict") if js.get("verdict") in VERDICTS else base["verdict"]
+    if report.get("passed"):
+        verdict = "passed"
+    return {"prose": prose or base["prose"], "verdict": verdict, "suggestions": suggestions or base["suggestions"], "source": provider}

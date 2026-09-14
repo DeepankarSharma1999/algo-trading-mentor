@@ -1,3 +1,5 @@
+import json
+
 from engine.mentor import service, templates
 from engine.mentor.guardrail import guardrail
 from engine.schema.testable import check_testable
@@ -55,4 +57,80 @@ def test_service_rejects_bad_llm_output_and_logs(monkeypatch):
     monkeypatch.setattr(service, "_ask", lambda *_a, **_k: "You should buy RELIANCE now.")
     out = service.coach("fine", [], None, {"NIFTY"})
     assert "RELIANCE" not in out and seen and seen[0][0] == "coach"
+    service.set_rejection_sink(lambda *_: None)
+
+
+# ---------------------------------------------------------------- suggest
+
+REPORT_FAIL = {
+    "passed": False, "weakest_stage": 1, "weakest_sentence": "In-sample coherence is your weakest gate.",
+    "stages": [{"stage": 1, "name": "In-sample coherence", "status": "fail", "summary": "11 trades", "metrics": {"trades": 11, "min_trades": 120}}],
+    "diagnosis": [
+        {"stage": 1, "kind": "bottleneck_condition", "title": "One entry condition is the bottleneck", "detail": "'vr > 1.5' held on 2.1% of bars.",
+         "numbers": {"true_pct": 2.1, "trades": 11, "min_trades": 120}, "levers": [{"label": "Condition vr > 1.5", "section": "entry", "path": "/entry_long/1"}]},
+        {"stage": 1, "kind": "sized_to_zero", "title": "Setups sized to zero", "detail": "570 setups skipped.", "numbers": {"skipped_for_size": 570, "one_r": 2000, "lot_size": 25},
+         "levers": [{"label": "Stop rule", "section": "exits", "path": "/stop"}]},
+    ],
+}
+SPEC = {"strategy_id": "x_v1", "instruments": ["NIFTY"], "timeframe": "5m", "entry_long": [{"lhs": "close", "op": ">", "rhs": "ema20"}, {"lhs": "vr", "op": ">", "rhs": 1.5}],
+        "stop": {"type": "atr", "params": {"length": 14, "mult": 2.0}}, "targets": [{"type": "rr", "value": 2}], "risk": {"max_trades_per_day": 2, "min_rr_after_costs": 1.5, "max_equity_risk_pct": 0.5}}
+
+
+def test_template_suggest_turns_findings_into_patches():
+    out = templates.suggest(SPEC, REPORT_FAIL)
+    assert out["source"] == "template" and out["verdict"] == "fixable"
+    ids = {s["id"]: s for s in out["suggestions"]}
+    assert ids["bottleneck"]["patch"] == [{"path": "/entry_long/1/rhs", "from": 1.5, "to": 1.125}]
+    assert ids["size"]["patch"] == [{"path": "/stop/params/mult", "from": 2.0, "to": 1.5}]
+    for s in out["suggestions"]:
+        assert service.patch_ok(s["patch"]) and guardrail(s["title"] + " " + s["reason"], {"NIFTY"}).ok
+
+
+def test_template_suggest_no_edge_prefers_simplify_and_says_so():
+    rep = {**REPORT_FAIL, "diagnosis": [{"stage": 2, "kind": "no_edge", "title": "No edge", "detail": "x", "numbers": {}, "levers": []}]}
+    out = templates.suggest(SPEC, rep)
+    assert out["verdict"] == "no_edge" and "fitting" in out["prose"]
+    kinds = {s["kind"] for s in out["suggestions"]}
+    assert "simplify" in kinds and "stop" in kinds and "tune" not in kinds
+
+
+def test_patch_ok_rejects_instruments_and_identity():
+    assert service.patch_ok([{"path": "/risk/max_trades_per_day", "from": 2, "to": 3}])
+    assert not service.patch_ok([{"path": "/instruments/0", "from": "NIFTY", "to": "RELIANCE"}])
+    assert not service.patch_ok([{"path": "/automation_permission", "to": "paper_only"}])
+    assert not service.patch_ok([{"path": "/name", "to": "x"}])
+    assert not service.patch_ok([{"path": "risk/x", "to": 1}])  # not a pointer
+    assert not service.patch_ok([{"path": "/risk/x"}])  # no value
+
+
+def test_provider_selection_prefers_gemini(monkeypatch):
+    monkeypatch.setattr(service.config, "GEMINI_API_KEY", "g")
+    monkeypatch.setattr(service.config, "ANTHROPIC_API_KEY", "a")
+    assert service.llm_provider() == "gemini"
+    monkeypatch.setattr(service.config, "GEMINI_API_KEY", "")
+    assert service.llm_provider() == "anthropic"
+    monkeypatch.setattr(service.config, "ANTHROPIC_API_KEY", "")
+    assert service.llm_provider() is None and service.suggest(SPEC, REPORT_FAIL, {"NIFTY"})["source"] == "template"
+
+
+def test_suggest_drops_forbidden_patches_and_keeps_source(monkeypatch):
+    monkeypatch.setattr(service.config, "GEMINI_API_KEY", "g")
+    reply = {"prose": "Two edits to your own rules.", "verdict": "fixable", "suggestions": [
+        {"title": "Switch instrument", "reason": "Trade RELIANCE instead.", "kind": "tune", "patch": [{"path": "/instruments/0", "from": "NIFTY", "to": "RELIANCE"}]},
+        {"title": "Relax the volume filter", "reason": "vr > 1.5 held on 2% of bars.", "kind": "tune", "patch": [{"path": "/entry_long/1/rhs", "from": 1.5, "to": 1.2}]},
+    ]}
+    monkeypatch.setattr(service, "_ask", lambda *_a, **_k: json.dumps(reply))
+    out = service.suggest(SPEC, REPORT_FAIL, {"NIFTY"})
+    # The instrument-swapping suggestion is dropped (forbidden root); the rule edit survives.
+    assert out["source"] == "gemini" and len(out["suggestions"]) == 1
+    assert out["suggestions"][0]["patch"] == [{"path": "/entry_long/1/rhs", "from": 1.5, "to": 1.2}]
+
+
+def test_suggest_rejects_buy_sell_prose(monkeypatch):
+    monkeypatch.setattr(service.config, "GEMINI_API_KEY", "g")
+    seen = []
+    service.set_rejection_sink(lambda ep, reason, raw: seen.append(ep))
+    monkeypatch.setattr(service, "_ask", lambda *_a, **_k: json.dumps({"prose": "You should buy on the next signal.", "verdict": "fixable", "suggestions": []}))
+    out = service.suggest(SPEC, REPORT_FAIL, {"NIFTY"})
+    assert out["source"] == "template" and "suggest" in seen
     service.set_rejection_sink(lambda *_: None)

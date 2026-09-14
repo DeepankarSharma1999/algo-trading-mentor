@@ -25,6 +25,7 @@ from engine.regime import classify
 from engine.rules.engine import as_strategy
 from engine.rules.operands import Computed
 from engine.schema.strategy import Strategy
+from engine.validation.diagnosis import Finding, diagnose
 from engine.validation.gates import AcceptanceGates
 
 STAGE_NAMES: dict[int, str] = {
@@ -58,6 +59,7 @@ class ValidationReport(BaseModel):
     weakest_stage: int | None = None
     weakest_sentence: str = ""
     passed: bool = False
+    diagnosis: list[Finding] = Field(default_factory=list)  # ARCHITECTURE section 4b; empty when passed
 
 
 @dataclass
@@ -111,6 +113,9 @@ def _verdict(fail: bool) -> str:
 
 
 # --- stages ---------------------------------------------------------------------------------------
+
+
+SKIP_KEYS = ("skipped_for_size", "skipped_invalid_stop", "skipped_for_rr", "skipped_day_limit", "cancelled_orders")
 
 
 def _stage1(ctx: _Ctx) -> StageResult:
@@ -174,7 +179,14 @@ def _stage1(ctx: _Ctx) -> StageResult:
             "target_side_errors": tgt_err,
             "margin": margin,
         },
-        detail={"stats": _stats(res.stats), "warmup_bars": warmup, "problems": problems},
+        detail={
+            "stats": _stats(res.stats),
+            "warmup_bars": warmup,
+            "problems": problems,
+            "condition_stats": {k: v.model_dump() for k, v in res.condition_stats.items()},
+            "setup_bars": dict(res.setup_bars),
+            "skips": {k: getattr(res.stats, k) for k in SKIP_KEYS},
+        },
     )
 
 
@@ -609,11 +621,14 @@ def run_pipeline(
     report.weakest_stage = weakest.stage if weakest else None
     report.weakest_sentence = weakest_sentence(weakest) if weakest else ""
     report.passed = all(s.status in ("pass", "skip") for s in stages)
+    if not report.passed:
+        report.diagnosis = diagnose(spec_dict, stages, ctx.base, one_r, lot_size, max_dd_pct)
     report.finished_at = datetime.now(UTC).isoformat()
     return report
 
 
 __all__ = [
+    "Finding",
     "HARD_STAGES",
     "STAGE_NAMES",
     "StageResult",

@@ -84,6 +84,15 @@ Decisions made autonomously while building phase 1. Newest at the bottom of each
   close, Settings offers a deliberate "Jump to", and every read of signals, trades and risk windows
   ignores rows dated after the simulated now.
 
+- **Fix-it flow keeps the gatekeeper honest.** Findings are deterministic arithmetic on the user's own
+  backtest; suggestions (Gemini, or templates without a key) are JSON-pointer edits restricted to the
+  rule sections and never to instruments, permissions or identity; the engine never applies anything,
+  the web saves every apply as a new version; and a negative gross expectancy out of sample is
+  labelled "no edge" with simplify-not-tune suggestions, because a threshold moved until the test
+  window passes is a fit, not a fix.
+- **Gemini is the default LLM provider** (the user's choice, and it has a free tier). One function
+  (`mentor.service._ask`) knows about providers; the guardrail and fallbacks are provider-agnostic.
+
 ## Stubs
 
 - `VendorProvider` (`engine/data/provider.py`): interface documented, raises `NotImplementedError`.

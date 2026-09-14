@@ -14,6 +14,8 @@ DATA_DIR = Path(os.getenv("DATA_DIR", str(REPO / "data")))
 SCHEMA_DIR = Path(os.getenv("SCHEMA_DIR", str(REPO / "packages" / "schema")))
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 PAPER_SPEED = int(os.getenv("PAPER_SPEED", "2"))
 
 # SQLAlchemy wants the psycopg3 driver name.

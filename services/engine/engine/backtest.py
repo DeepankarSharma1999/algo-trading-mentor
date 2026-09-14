@@ -29,7 +29,14 @@ from pydantic import BaseModel, Field
 
 from engine import indicators as ind
 from engine.costs import CostParams, round_trip_cost
-from engine.rules.engine import as_strategy, evaluate, stop_price, target_prices, trailing_stop
+from engine.rules.engine import (
+    as_strategy,
+    evaluate,
+    render_condition,
+    stop_price,
+    target_prices,
+    trailing_stop,
+)
 from engine.rules.operands import Computed
 from engine.schema.strategy import Strategy
 
@@ -74,11 +81,19 @@ class Stats(BaseModel):
     max_drawdown_r: float = 0.0
     largest_trade_share: float = 0.0
     sharpe_ish: float = 0.0  # mean R / stdev R over trades (not annualised)
+    gross_expectancy_r: float = 0.0  # before brokerage, taxes and fees (slippage is in the fill price)
+    cost_per_trade_r: float = 0.0  # gross - net, per trade, in R
     skipped_for_size: int = 0
     skipped_invalid_stop: int = 0
     skipped_for_rr: int = 0
     skipped_day_limit: int = 0
     cancelled_orders: int = 0
+
+
+class ConditionStat(BaseModel):
+    side: str  # long|short
+    true_pct: float  # share of evaluable bars on which the condition held, 0..100
+    true_bars: int
 
 
 class BacktestResult(BaseModel):
@@ -87,9 +102,31 @@ class BacktestResult(BaseModel):
     stats: Stats = Field(default_factory=Stats)
     by_regime: dict[str, Stats] = Field(default_factory=dict)
     start_equity: float = 0.0
+    condition_stats: dict[str, ConditionStat] = Field(default_factory=dict)  # rendered condition -> how often it held
+    setup_bars: dict[str, int] = Field(default_factory=dict)  # {long, short, bars}: bars on which every entry condition held
 
 
 # --- helpers --------------------------------------------------------------------------------------
+
+
+def _condition_stats(spec: Strategy, ev: pd.DataFrame) -> tuple[dict[str, ConditionStat], dict[str, int]]:
+    """How often each entry condition held, and how often every condition of a side held together."""
+    out: dict[str, ConditionStat] = {}
+    for side, conds in (("long", spec.entry_long or []), ("short", spec.entry_short or [])):
+        for c in conds:
+            name = render_condition(c)
+            if name not in ev.columns:
+                continue
+            col = ev[name]
+            valid = col.notna()
+            held = int((col[valid].astype(bool)).sum())
+            out[name] = ConditionStat(side=side, true_pct=round(100.0 * held / int(valid.sum()), 2) if int(valid.sum()) else 0.0, true_bars=held)
+    setups = {
+        "long": int(np.asarray(ev["long_setup"].to_numpy(), dtype=bool).sum()),
+        "short": int(np.asarray(ev["short_setup"].to_numpy(), dtype=bool).sum()),
+        "bars": int(len(ev)),
+    }
+    return out, setups
 
 
 def _hhmm(s: str) -> int:
@@ -126,6 +163,8 @@ def compute_stats(trades: list[BacktestTrade], start_equity: float) -> Stats:
     else:
         pf = 99.0 if gross_profit > 0 else 0.0
     sd = r.std(ddof=1) if len(r) > 1 else 0.0
+    risk_rs = np.array([abs(t.entry - t.stop) * t.qty for t in trades])
+    gross_r = np.where(risk_rs > 0, np.array([t.gross_pnl for t in trades]) / np.where(risk_rs > 0, risk_rs, 1.0), 0.0)
     return Stats(
         trades=len(r),
         wins=int(len(wins)),
@@ -140,6 +179,8 @@ def compute_stats(trades: list[BacktestTrade], start_equity: float) -> Stats:
         max_drawdown_r=float(max(dd_r, 0.0)),
         largest_trade_share=float(net[net > 0].max() / gross_profit) if gross_profit > 0 else 0.0,
         sharpe_ish=float(r.mean() / sd) if sd > 0 else 0.0,
+        gross_expectancy_r=float(gross_r.mean()),
+        cost_per_trade_r=float(gross_r.mean() - r.mean()),
     )
 
 
@@ -197,6 +238,7 @@ def run_backtest(
     computed: Computed = dict(inputs) if inputs is not None else ind.compute_inputs(bars, spec.inputs)
     ev = evaluate(spec, bars, computed, regime)
     long_setup, short_setup = ev["long_setup"].to_numpy(), ev["short_setup"].to_numpy()
+    condition_stats, setup_bars = _condition_stats(spec, ev)
     regime_ok = np.asarray(ev["regime_ok"].to_numpy(), dtype=bool)
     regimes = ev["regime"].to_numpy()
     if not enforce_regime_affinity:
@@ -412,6 +454,7 @@ def run_backtest(
     )
     for k in ("skipped_for_size", "skipped_invalid_stop", "skipped_for_rr", "skipped_day_limit", "cancelled_orders"):
         setattr(result.stats, k, getattr(stats, k))
+    result.condition_stats, result.setup_bars = condition_stats, setup_bars
     return result
 
 
@@ -450,6 +493,16 @@ def run_backtest_multi(
         by_regime=stats_by_regime(trades, start_equity),
         start_equity=start_equity,
     )
+    # Condition hit rates weighted by bars; setup counts summed.
+    total_bars = sum(int(r.setup_bars.get("bars", 0)) for r in results) or 1
+    names = {k for r in results for k in r.condition_stats}
+    for name in names:
+        parts = [(r.condition_stats[name], int(r.setup_bars.get("bars", 0))) for r in results if name in r.condition_stats]
+        held = sum(cs.true_bars for cs, _ in parts)
+        merged.condition_stats[name] = ConditionStat(
+            side=parts[0][0].side, true_pct=round(100.0 * held / total_bars, 2), true_bars=held
+        )
+    merged.setup_bars = {k: sum(int(r.setup_bars.get(k, 0)) for r in results) for k in ("long", "short", "bars")}
     for k in ("skipped_for_size", "skipped_invalid_stop", "skipped_for_rr", "skipped_day_limit", "cancelled_orders"):
         setattr(merged.stats, k, sum(getattr(r.stats, k) for r in results))
     return merged

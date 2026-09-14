@@ -38,6 +38,10 @@ class CoachBody(BaseModel):
     text: str | None = None
 
 
+class SuggestBody(BaseModel):
+    job_id: str
+
+
 def _known_symbols(s: Session, uid: str) -> set[str]:
     known = user_instruments(s, uid)
     try:
@@ -99,3 +103,18 @@ def coach(body: CoachBody, uid: str = Depends(user_id), s: Session = Depends(db_
     else:
         raise ApiError(400, "Send a note_id or some text for the mentor to read.")
     return {"prose": mentor.coach(text, hits, trade, allowed)}
+
+
+@router.post("/mentor/suggest")
+def suggest(body: SuggestBody, uid: str = Depends(user_id), s: Session = Depends(db_session)) -> dict:
+    """Concrete edits to the user's own rules for a finished validation (ARCHITECTURE section 4b)."""
+    job = s.get(m.ValidationJob, body.job_id)
+    if job is None or job.user_id != uid:
+        raise ApiError(404, "That validation job does not exist.")
+    if not job.report or job.status not in ("done", "failed"):
+        raise ApiError(409, "The validation has not finished yet; ask again when every stage has a result.")
+    strat = s.get(m.Strategy, job.strategy_id)
+    if strat is None:
+        raise ApiError(404, "The strategy behind that job no longer exists.")
+    allowed = {str(x).upper() for x in (strat.spec or {}).get("instruments", [])}
+    return mentor.suggest(dict(strat.spec), dict(job.report), allowed)

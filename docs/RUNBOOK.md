@@ -69,10 +69,21 @@ environment. When the provider is not synthetic the footer drops the "Synthetic 
 
 ## Mentor LLM
 
-Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`, default `claude-sonnet-5`) in `infra/.env`.
-Without a key every mentor endpoint returns deterministic template prose from
-`services/engine/engine/mentor/templates.py`. With a key, replies still pass the guardrail; rejected
-replies fall back to the template and are written to `guardrail_log`.
+Set `GEMINI_API_KEY` in `infra/.env` (free key at https://aistudio.google.com/apikey; model defaults to
+`gemini-2.5-flash`, override with `GEMINI_MODEL`). `ANTHROPIC_API_KEY` works too; Gemini wins when both
+are set. Without any key every mentor endpoint returns deterministic template prose and template
+suggestions from `services/engine/engine/mentor/templates.py`. With a key, replies still pass the
+guardrail; rejected replies fall back to the template and are written to `guardrail_log`.
+
+## When a strategy fails validation
+
+The report ends with "What you can change": one finding per failed check, computed from the backtest
+(which entry condition held least often, how many setups sized to zero, gross vs net expectancy and
+cost per trade, sensitivity spikes, drawdown vs profile), each with buttons into the exact Builder
+section. "Ask the mentor for changes" turns the same numbers into concrete edits to your own rules
+(JSON-pointer patches). Nothing is ever applied automatically: "Apply" saves the edit as the next
+version and opens it in the Builder; "Edit and re-test" does the same without a patch. When the rules
+lose before costs out of sample the mentor says "no edge" and offers simplification, not tuning.
 
 ## Checks
 
