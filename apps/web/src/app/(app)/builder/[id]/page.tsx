@@ -6,11 +6,15 @@ import { BuilderEditor } from "./BuilderEditor";
 
 export const dynamic = "force-dynamic";
 
+const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+/** `?section=<key>` (identity | timeframe | inputs | entry | exits | risk) opens that fold on load; unknown keys are ignored. */
 export default async function BuilderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireUser();
   const { id } = await params;
   const sp = await searchParams;
-  const notice = Array.isArray(sp.notice) ? sp.notice[0] : sp.notice;
+  const notice = first(sp.notice);
+  const section = first(sp.section);
   const s = await getStrategy(id, user.id);
   if (!s) notFound();
   return (
@@ -27,6 +31,7 @@ export default async function BuilderPage({ params, searchParams }: { params: Pr
         key={s.id}
         initial={{ id: s.id, version: s.version, parentId: s.parentId, status: s.status, spec: s.spec }}
         notice={notice ?? null}
+        section={section ?? null}
       />
     </>
   );

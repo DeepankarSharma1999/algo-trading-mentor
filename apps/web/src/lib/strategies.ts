@@ -74,12 +74,13 @@ export async function createDraft(userId: string): Promise<string> {
 
 /**
  * Save a spec. A validated or version-locked row becomes a new `untested` version (returned id differs);
- * anything else is updated in place with its status recomputed. Returns the id that now holds the spec.
+ * anything else is updated in place with its status recomputed. `opts.newVersion` always creates the next
+ * version. Returns the id that now holds the spec.
  */
-export async function saveSpec(userId: string, id: string, spec: Strategy): Promise<{ id: string; created: boolean; status: string }> {
+export async function saveSpec(userId: string, id: string, spec: Strategy, opts: { newVersion?: boolean } = {}): Promise<{ id: string; created: boolean; status: string }> {
   const current = await db.strategy.findFirst({ where: { id, userId } });
   if (!current) throw new Error("That strategy does not exist.");
-  const plan = planSave(current, spec, await allIds());
+  const plan = planSave(current, spec, await allIds(), opts);
   if (plan.mode === "bump") {
     await db.strategy.create({ data: {
       id: plan.id, userId, name: plan.spec.name, slug: current.slug, version: plan.version, parentId: plan.previousId,

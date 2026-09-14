@@ -1,6 +1,7 @@
 // Pure helpers that turn a validation job row into what the checklist renders. Unit-tested with a
 // queued job (report null) and a complete report, so the page is known to render both.
-import type { JobStatus, StageResult, ValidationReport } from "@/lib/types";
+import { rupees } from "@/lib/format";
+import type { Finding, FindingKind, JobStatus, Section, SkipCounter, StageResult, Stats, ValidationReport } from "@/lib/types";
 
 /** Mirrors engine/validation/pipeline.py STAGE_NAMES. Order matters here; stages are numbered on screen. */
 export const STAGE_NAMES: Record<number, string> = {
@@ -111,3 +112,51 @@ export function formatMetric(key: string, v: number): string {
   if (/(pct|dd_p\d+)$/.test(key)) return `${v.toFixed(1)}%`;
   return v.toFixed(2);
 }
+
+// ---- §4b fix-it flow -------------------------------------------------------------------------------------
+
+/** The finding kind in words, for the `.label` of a "What you can change" row. */
+export const KIND_WORDS: Record<FindingKind, string> = {
+  bottleneck_condition: "bottleneck condition", sized_to_zero: "sized to zero", rr_filter: "R:R filter", day_limit: "daily limit",
+  costs: "costs", no_edge: "no edge", regime: "regime", sensitivity: "sensitivity", drawdown: "drawdown", other: "other",
+};
+export const findingLabel = (f: Pick<Finding, "stage" | "kind">) => `Stage ${f.stage} · ${KIND_WORDS[f.kind] ?? String(f.kind).replace(/_/g, " ")}`;
+
+const SECTIONS: readonly Section[] = ["identity", "timeframe", "inputs", "entry", "exits", "risk"];
+/** A section key from the engine, or "entry" when it is not one the Builder knows. */
+export const asSection = (v: unknown): Section => (SECTIONS as readonly unknown[]).includes(v) ? (v as Section) : "entry";
+
+/** Findings worth showing: only on a finished run that did not pass. Reports from before the flow have none. */
+export function findingsOf(job: Pick<JobStatus, "status" | "report">): Finding[] {
+  if (job.status !== "done" || !job.report || job.report.passed) return [];
+  return Array.isArray(job.report.diagnosis) ? job.report.diagnosis.filter((f) => f && typeof f === "object") : [];
+}
+
+/** Where "Edit and re-test" opens the Builder: the first lever's section, else the entry conditions. */
+export const firstLeverSection = (findings: Finding[]): Section => asSection(findings.flatMap((f) => f.levers ?? [])[0]?.section);
+
+/** A finding's `numbers` as compact text. Rupee and count keys the engine uses are named here; the rest follow the stage metrics. */
+export function formatFindingNumber(key: string, v: number): string {
+  if (!Number.isFinite(v)) return "–";
+  if (key === "one_r") return rupees(v);
+  if (key === "cost_per_trade_r") return `${Math.abs(v).toFixed(2)}R`;
+  if (/^(skipped_|cancelled_|neighbours|setups$|lot_size$|true_bars$)/.test(key)) return String(Math.round(v));
+  return formatMetric(key, v);
+}
+
+/** Gross, cost and net expectancy per trade in R, or null when the payload predates the cost split. */
+export function costBreakdown(s: Partial<Stats> | null | undefined): { gross: number; cost: number; net: number; exceeds: boolean } | null {
+  if (!s || typeof s !== "object" || !Number.isFinite(s.gross_expectancy_r) || !Number.isFinite(s.expectancy_r)) return null;
+  const gross = s.gross_expectancy_r as number, net = s.expectancy_r as number;
+  const cost = Number.isFinite(s.cost_per_trade_r) ? (s.cost_per_trade_r as number) : gross - net;
+  return { gross, cost, net, exceeds: gross > 0 && net < 0 };
+}
+
+/** The stage-1 skip counters, in the order the backtester checks them, with what each one means in plain words. */
+export const SKIP_MEANING: Record<SkipCounter, { label: string; meaning: string }> = {
+  skipped_invalid_stop: { label: "Invalid stop", meaning: "the stop landed on the wrong side of the entry, so the setup was dropped" },
+  skipped_for_size: { label: "Size", meaning: "one lot risked more than 1R from entry to stop; the position would be zero" },
+  skipped_for_rr: { label: "R:R", meaning: "reward-to-risk after costs was below your minimum" },
+  skipped_day_limit: { label: "Day limit", meaning: "your max trades per day had already been taken" },
+  cancelled_orders: { label: "Cancelled", meaning: "break or limit orders not filled on the next bar" },
+};

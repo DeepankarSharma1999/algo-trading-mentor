@@ -69,10 +69,11 @@ export type SavePlan =
 /**
  * Decide what saving `spec` over `current` does. A validated (or version-locked) row is never edited in
  * place: the save becomes a new row, one version up, parented to the old one, status "untested".
- * Otherwise the row is updated and its status recomputed.
+ * Otherwise the row is updated and its status recomputed. `opts.newVersion` forces the bump for any row, so a
+ * validation report stays attached to the exact version it tested (the fix-it flow, ARCHITECTURE §4b).
  */
-export function planSave(current: StrategyRowLike, spec: Strategy, takenIds: Iterable<string>): SavePlan {
-  const locked = current.status === "validated" || (current.spec as Partial<Strategy> | null)?.version_locked === true;
+export function planSave(current: StrategyRowLike, spec: Strategy, takenIds: Iterable<string>, opts: { newVersion?: boolean } = {}): SavePlan {
+  const locked = opts.newVersion === true || current.status === "validated" || (current.spec as Partial<Strategy> | null)?.version_locked === true;
   if (locked) {
     const id = nextFreeVersionId(current.id, takenIds);
     const { version } = parseStrategyId(id);

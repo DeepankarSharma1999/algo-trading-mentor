@@ -107,3 +107,25 @@ describe("blocked reasons", () => {
     expect(watchBlockedReason("validated", "paper_only")).toBeNull();
   });
 });
+
+describe("planSave with newVersion", () => {
+  const draft = { id: "ema_cross_v1", status: "draft", version: 1, parentId: null, spec: emptyDraft("ema_cross_v1") };
+  it("always bumps, even a draft or an untested row", () => {
+    const p = planSave(draft, complete, ["ema_cross_v1"], { newVersion: true });
+    expect(p.mode).toBe("bump");
+    if (p.mode !== "bump") return;
+    expect(p.id).toBe("ema_cross_v2");
+    expect(p.previousId).toBe("ema_cross_v1");
+    expect(p.status).toBe("untested");
+    expect(p.spec).toMatchObject({ strategy_id: "ema_cross_v2", version: 2, parent_id: "ema_cross_v1", version_locked: false });
+    const p2 = planSave({ id: "ema_cross_v2", status: "untested", version: 2, parentId: "ema_cross_v1", spec: complete }, complete, ["ema_cross_v1", "ema_cross_v2"], { newVersion: true });
+    expect(p2.mode).toBe("bump");
+    if (p2.mode !== "bump") return;
+    expect(p2.id).toBe("ema_cross_v3");
+  });
+  it("is the ordinary in-place save when the option is absent or false", () => {
+    expect(planSave(draft, complete, ["ema_cross_v1"]).mode).toBe("update");
+    expect(planSave(draft, complete, ["ema_cross_v1"], { newVersion: false }).mode).toBe("update");
+    expect(planSave(draft, complete, ["ema_cross_v1"], {}).mode).toBe("update");
+  });
+});

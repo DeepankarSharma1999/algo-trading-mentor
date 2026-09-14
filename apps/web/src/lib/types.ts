@@ -1,4 +1,4 @@
-// Mirrors docs/ARCHITECTURE.md §4. Keep in sync by hand; the engine is the producer.
+// Mirrors docs/ARCHITECTURE.md §4 and §4b. Keep in sync by hand; the engine is the producer.
 export type Regime = "trend" | "range" | "compression" | "high_vol" | "event";
 export type ExecState = "WATCHING" | "SETUP_FOUND" | "ARMED" | "ORDER_PENDING" | "OPEN" | "EXIT_PENDING" | "CLOSED" | "BLOCKED";
 export type BehaviourState = "CALM" | "ELEVATED" | "COOLDOWN" | "RESEARCH";
@@ -33,9 +33,38 @@ export interface DeskSummary {
   provider: "synthetic" | "csv";
 }
 export interface StageResult { stage: number; name: string; status: "pass" | "fail" | "skip" | "pending"; summary: string; metrics: Record<string, number>; detail: unknown }
+
+// ---- §4b fix-it flow -------------------------------------------------------------------------------------
+/** Builder fold ids are `sec-<section>`. */
+export type Section = "identity" | "timeframe" | "inputs" | "entry" | "exits" | "risk";
+/** Something in the user's own rules that drives a finding. `path` is a JSON pointer into the spec. */
+export interface Lever { label: string; section: Section; path?: string }
+export type FindingKind = "bottleneck_condition" | "sized_to_zero" | "rr_filter" | "day_limit" | "costs" | "no_edge" | "regime" | "sensitivity" | "drawdown" | "other";
+export interface Finding {
+  stage: number;
+  kind: FindingKind;
+  title: string;      // one line, e.g. "One condition is the bottleneck"
+  detail: string;     // plain sentence with the numbers
+  numbers: Record<string, number>;
+  levers: Lever[];
+}
+/** One JSON-pointer edit to the spec. `from` is what the engine saw; only `to` is ever applied. */
+export interface SpecPatch { path: string; from?: unknown; to: unknown }
+export interface Suggestion { id: string; title: string; reason: string; kind: "fix" | "tune" | "simplify" | "stop"; patch: SpecPatch[] }
+/** Reply of `POST /mentor/suggest { job_id }`. */
+export interface SuggestReply { prose: string; verdict: "fixable" | "no_edge" | "passed"; suggestions: Suggestion[]; source: "gemini" | "anthropic" | "template" }
+
+/** Stage-1 detail extras (engine/backtest.py). `true_pct` is 0..100. Older reports lack all of these; read them defensively. */
+export interface ConditionStat { side: "long" | "short"; true_pct: number; true_bars: number }
+export interface SetupBars { long: number; short: number; bars: number }
+export type SkipCounter = "skipped_for_size" | "skipped_for_rr" | "skipped_day_limit" | "skipped_invalid_stop" | "cancelled_orders";
+export interface Stage1Detail { stats?: Stats; warmup_bars?: number; problems?: string[]; condition_stats?: Record<string, ConditionStat>; setup_bars?: SetupBars }
+
 export interface ValidationReport {
   strategy_id: string; started_at: string; finished_at: string | null;
   stages: StageResult[]; weakest_stage: number | null; weakest_sentence: string; passed: boolean;
+  /** §4b: empty when passed; absent on reports written before the fix-it flow. */
+  diagnosis?: Finding[];
 }
 export interface JobStatus { id: string; status: "queued" | "running" | "done" | "failed"; current_stage: number; report: ValidationReport | null; error: string | null }
 export interface PaperTrade {
@@ -51,4 +80,5 @@ export interface JournalAggregates {
   streaks: { current: number; longest_win: number; longest_loss: number };
   totals: { trades: number; net_r: number; process_score: number; win_rate: number };
 }
-export interface Stats { trades: number; wins: number; losses: number; win_rate: number; expectancy_r: number; avg_win_r: number; avg_loss_r: number; profit_factor: number; net_pnl: number; max_drawdown_pct: number; max_drawdown_r: number; largest_trade_share: number; [k: string]: number }
+/** `gross_expectancy_r` is before brokerage, taxes and fees; `cost_per_trade_r` = gross − net. Both absent on older payloads. */
+export interface Stats { trades: number; wins: number; losses: number; win_rate: number; expectancy_r: number; gross_expectancy_r: number; cost_per_trade_r: number; avg_win_r: number; avg_loss_r: number; profit_factor: number; net_pnl: number; max_drawdown_pct: number; max_drawdown_r: number; largest_trade_share: number; [k: string]: number }

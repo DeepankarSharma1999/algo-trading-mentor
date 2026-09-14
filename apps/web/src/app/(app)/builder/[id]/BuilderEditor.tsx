@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AUTOMATION_PERMISSIONS, INDICATORS, OPS, REGIMES, TIMEFRAMES, checkTestable, type Condition, type Input, type Strategy } from "@atm/schema";
 import { PlainChip } from "@/components/Chip";
@@ -18,6 +18,8 @@ const asParams = (p: object | undefined): Params => (p ?? {}) as Params;
 interface Props {
   initial: { id: string; version: number; parentId: string | null; status: string; spec: Strategy };
   notice: string | null;
+  /** A `SECTION` key from `?section=`; that fold opens, scrolls under the sticky bar and takes focus on mount. */
+  section?: string | null;
 }
 
 /** Section ids, in the order they appear. The testable verdict links each missing piece to the section that fixes it. */
@@ -36,7 +38,7 @@ function openSection(id: string) {
 const FORMALISE_EXAMPLE = "Example: On 15-minute bars of my own two symbols, go long when the close crosses above the 20 EMA while RSI(14) is above 50. Enter at the next bar open. Stop just below the signal bar. Take profit at 2R or exit at 15:15, whichever comes first. Risk half a percent per trade, at most three trades a day.";
 
 /** Two-column ledger: the schema as folded, numbered sections on the left; the live testable verdict on the right. */
-export function BuilderEditor({ initial, notice }: Props) {
+export function BuilderEditor({ initial, notice, section }: Props) {
   const router = useRouter();
   const [spec, setSpec] = useState<Strategy>(initial.spec);
   const [saved, setSaved] = useState<string>(() => JSON.stringify(initial.spec));
@@ -52,6 +54,11 @@ export function BuilderEditor({ initial, notice }: Props) {
   const operands = useMemo(() => operandsFor(spec.inputs), [spec.inputs]);
   const dirty = useMemo(() => JSON.stringify(spec) !== saved, [spec, saved]);
   const patch = (p: Partial<Strategy>) => setSpec((s) => ({ ...s, ...p }));
+
+  // Deep link from a validation finding: /builder/<id>?section=entry. Unknown keys do nothing.
+  useEffect(() => {
+    if (section && Object.prototype.hasOwnProperty.call(SECTION, section)) openSection(SECTION[section as keyof typeof SECTION]);
+  }, [section]);
 
   const instrumentTokens = instrumentsText.split(",").map((t) => t.trim()).filter(Boolean);
   const badInstruments = instrumentTokens.filter((t) => !INSTRUMENT_RE.test(t));

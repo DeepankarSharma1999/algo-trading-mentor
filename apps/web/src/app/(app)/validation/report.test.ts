@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { JobStatus } from "@/lib/types";
-import { completeReport, runningReport } from "./report.fixture";
-import { STAGE_CHECKS, STAGE_COUNT, STAGE_NAMES, formatMetric, gateClass, headline, isActive, keyMetrics, openByDefault, plainStatus, stagesOf, statusWord } from "./report";
+import { sectionForPath } from "@/lib/patch";
+import { completeReport, failedReport, passedReport, runningReport, templateSuggestions } from "./report.fixture";
+import { STAGE_CHECKS, STAGE_COUNT, STAGE_NAMES, asSection, costBreakdown, findingLabel, findingsOf, firstLeverSection, formatFindingNumber, formatMetric, gateClass, headline, isActive, keyMetrics, openByDefault, plainStatus, stagesOf, statusWord } from "./report";
 
 const queued: JobStatus = { id: "j1", status: "queued", current_stage: 0, report: null, error: null };
 const running: JobStatus = { id: "j2", status: "running", current_stage: 2, report: runningReport, error: null };
@@ -91,5 +92,57 @@ describe("metrics", () => {
     expect(isActive(running)).toBe(true);
     expect(isActive(done)).toBe(false);
     expect(isActive(failed)).toBe(false);
+  });
+});
+
+describe("fix-it flow (§4b)", () => {
+  const failedJob: JobStatus = { id: "j5", status: "done", current_stage: 2, report: failedReport, error: null };
+  it("shows findings only on a finished run that did not pass", () => {
+    expect(findingsOf(failedJob)).toHaveLength(3);
+    expect(findingsOf(done)).toEqual([]);
+    expect(findingsOf({ status: "done", report: passedReport })).toEqual([]);
+    expect(findingsOf({ status: "running", report: { ...failedReport } })).toEqual([]);
+    expect(findingsOf({ status: "done", report: { ...failedReport, diagnosis: undefined } })).toEqual([]);
+    expect(findingsOf(queued)).toEqual([]);
+  });
+  it("labels a finding by stage and kind in words", () => {
+    expect(findingLabel({ stage: 1, kind: "bottleneck_condition" })).toBe("Stage 1 · bottleneck condition");
+    expect(findingLabel({ stage: 2, kind: "costs" })).toBe("Stage 2 · costs");
+    expect(findingLabel({ stage: 1, kind: "rr_filter" })).toBe("Stage 1 · R:R filter");
+  });
+  it("opens the Builder at the first lever, and at entry when there is none", () => {
+    expect(firstLeverSection(findingsOf(failedJob))).toBe("entry");
+    expect(firstLeverSection([{ ...failedReport.diagnosis![2] }])).toBe("timeframe");
+    expect(firstLeverSection([])).toBe("entry");
+    expect(asSection("risk")).toBe("risk");
+    expect(asSection("nonsense")).toBe("entry");
+  });
+  it("formats finding numbers as rupees, counts or metrics", () => {
+    expect(formatFindingNumber("one_r", 2000)).toMatch(/2,000/);
+    expect(formatFindingNumber("skipped_for_size", 23)).toBe("23");
+    expect(formatFindingNumber("lot_size", 1)).toBe("1");
+    expect(formatFindingNumber("true_pct", 6.1)).toBe("6.1%");
+    expect(formatFindingNumber("gross_expectancy_r", 0.06)).toBe("+0.06R");
+    expect(formatFindingNumber("cost_per_trade_r", 0.13)).toBe("0.13R");
+    expect(formatFindingNumber("min_trades", 60)).toBe("60");
+    expect(formatFindingNumber("x", NaN)).toBe("–");
+  });
+  it("splits expectancy into gross, cost and net and names when costs exceed the edge", () => {
+    const oos = (failedReport.stages[1].detail as { oos: import("@/lib/types").Stats }).oos;
+    expect(costBreakdown(oos)).toEqual({ gross: 0.06, cost: 0.13, net: -0.07, exceeds: true });
+    const base = (completeReport.stages[0].detail as { stats: import("@/lib/types").Stats }).stats;
+    expect(costBreakdown(base)).toMatchObject({ gross: 0.33, cost: 0.12, net: 0.21, exceeds: false });
+    expect(costBreakdown({ trades: 3, expectancy_r: 0.1 })).toBeNull();
+    expect(costBreakdown(null)).toBeNull();
+    expect(costBreakdown({ expectancy_r: 0.1, gross_expectancy_r: 0.3 })?.cost).toBeCloseTo(0.2);
+  });
+  it("keeps the fixtures coherent: a passed report has no findings, the failed one names allowed roots only", () => {
+    expect(passedReport.passed).toBe(true);
+    expect(passedReport.diagnosis).toEqual([]);
+    expect(failedReport.passed).toBe(false);
+    expect(plainStatus(failedJob).text).toBe("Failed at stage 2");
+    expect(stagesOf(failedReport).map((s) => s.status)).toEqual(["pass", "fail", "pending", "pending", "pending", "pending", "pending", "pending"]);
+    for (const s of templateSuggestions.suggestions) for (const p of s.patch) expect(["inputs", "entry", "timeframe", "exits", "risk"]).toContain(sectionForPath(p.path));
+    expect(sectionForPath(templateSuggestions.suggestions[1].patch[0].path)).toBe("timeframe");
   });
 });
