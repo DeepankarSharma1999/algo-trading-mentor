@@ -3,7 +3,11 @@ const inr2 = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR"
 
 export const rupees = (n: number | string | null | undefined) => (n === null || n === undefined ? "–" : inr.format(Number(n)));
 export const rupees2 = (n: number | string | null | undefined) => (n === null || n === undefined ? "–" : inr2.format(Number(n)));
-export const r = (n: number | null | undefined, d = 2) => (n === null || n === undefined || Number.isNaN(n) ? "–" : `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(d)}R`);
+export const r = (n: number | null | undefined, d = 2) => {
+  if (n === null || n === undefined || Number.isNaN(n)) return "–";
+  const v = Math.abs(n) < 0.5 * 10 ** -d ? 0 : n; // never print a signed zero
+  return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(d)}R`;
+};
 export const rAbs = (n: number | null | undefined, d = 1) => (n === null || n === undefined ? "–" : `${n.toFixed(d)}R`);
 export const pct = (n: number | null | undefined, d = 1) => (n === null || n === undefined || Number.isNaN(n) ? "–" : `${n.toFixed(d)}%`);
 export const num = (n: number | null | undefined, d = 2) => (n === null || n === undefined || Number.isNaN(n) ? "–" : n.toFixed(d));

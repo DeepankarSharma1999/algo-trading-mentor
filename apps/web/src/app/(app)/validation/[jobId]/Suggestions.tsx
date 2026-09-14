@@ -99,9 +99,13 @@ function SuggestionRow({ s, busy, onApply }: { s: Suggestion; busy: boolean; onA
           <div className="faint mono" style={{ marginTop: 6, fontSize: "var(--fs-1)" }}>no patch: advice only</div>
         )}
       </div>
-      <button type="button" className="btn btn--sm" disabled={busy || !applicable} onClick={onApply} title={applicable ? "Save as the next version and open it" : "Nothing to apply"}>
-        {busy ? "Applying…" : "Apply"}
-      </button>
+      {applicable ? (
+        <button type="button" className="btn btn--sm" disabled={busy} onClick={onApply} title="Save as the next version and open it">
+          {busy ? "Applying…" : "Apply"}
+        </button>
+      ) : (
+        <span className="faint mono" style={{ fontSize: "var(--fs-1)" }}>advice</span>
+      )}
     </div>
   );
 }
